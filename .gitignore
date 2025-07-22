@@ -117,6 +117,8 @@ dist
 # Gatsby files
 .cache/
 public
+# BUT include the React frontend public directory
+!frontend/public/
 
 # Storybook build outputs
 .out
