@@ -124,9 +124,9 @@ The deployment includes:
 - ✅ **Nginx Service Discovery**: Uses OpenShift internal DNS resolver
 - ✅ **Container Permissions**: Fixed nginx cache directory permissions for restricted security context
 - ✅ **Nginx Configuration**: Optimized for containerized environment with stderr logging
-- ✅ **PID File Handling**: Removed explicit PID file to avoid permission conflicts
+- ✅ **PID File Handling**: Use home directory for nginx PID file with proper ownership
 
-**Status**: All OpenShift deployment issues resolved. Nginx configuration minimized for maximum compatibility.
+**Status**: All OpenShift deployment issues resolved. Latest fix addresses `/run/nginx.pid` permission errors.
 
 See [OPENSHIFT.md](OPENSHIFT.md) for detailed deployment instructions, architecture overview, and troubleshooting guide.
 
