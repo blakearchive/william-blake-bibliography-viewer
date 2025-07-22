@@ -1,0 +1,47 @@
+FROM python:3.11-slim as downloader
+
+# Install download tools
+RUN apt-get update && apt-get install -y wget curl && rm -rf /var/lib/apt/lists/*
+
+# Download the PDF directly from GitHub releases or raw URL
+WORKDIR /downloads
+RUN wget -O "Bibliography Final Draft.pdf" \
+    "https://media.githubusercontent.com/media/blakearchive/william-blake-bibliography-viewer/main/backend/Bibliography%20Final%20Draft.pdf" \
+    || curl -L -o "Bibliography Final Draft.pdf" \
+    "https://media.githubusercontent.com/media/blakearchive/william-blake-bibliography-viewer/main/backend/Bibliography%20Final%20Draft.pdf" \
+    || echo "PDF download failed"
+
+# Main application stage
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies for PyMuPDF
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    musl-dev \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the downloaded PDF from the previous stage
+COPY --from=downloader /downloads/"Bibliography Final Draft.pdf" ./
+
+# Copy application code
+COPY main.py .
+COPY PDF_SETUP.md .
+
+# Create non-root user for security
+RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Command to run the application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

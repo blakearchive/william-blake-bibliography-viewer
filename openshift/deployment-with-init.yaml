@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blake-bibliography-backend
+  namespace: blake-bibliography
+  labels:
+    app: blake-bibliography-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blake-bibliography-backend
+  template:
+    metadata:
+      labels:
+        app: blake-bibliography-backend
+    spec:
+      initContainers:
+      - name: pdf-downloader
+        image: curlimages/curl:latest
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          echo "Downloading PDF file..."
+          # Try multiple sources for the PDF
+          curl -L -o "/shared/Bibliography Final Draft.pdf" \
+            "https://drive.google.com/uc?export=download&id=YOUR_GOOGLE_DRIVE_FILE_ID" \
+          || curl -L -o "/shared/Bibliography Final Draft.pdf" \
+            "https://github.com/blakearchive/william-blake-bibliography-viewer/releases/download/v1.0/Bibliography-Final-Draft.pdf" \
+          || curl -L -o "/shared/Bibliography Final Draft.pdf" \
+            "https://archive.org/download/YOUR_ARCHIVE_ID/Bibliography-Final-Draft.pdf" \
+          || echo "All PDF download attempts failed"
+          
+          if [ -f "/shared/Bibliography Final Draft.pdf" ]; then
+            echo "PDF downloaded successfully: $(ls -lh '/shared/Bibliography Final Draft.pdf')"
+          else
+            echo "ERROR: PDF download failed"
+            exit 1
+          fi
+        volumeMounts:
+        - name: shared-data
+          mountPath: /shared
+      containers:
+      - name: backend
+        image: blake-bibliography-backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PORT
+          value: "8000"
+        - name: PDF_PATH
+          value: "/app/Bibliography Final Draft.pdf"
+        volumeMounts:
+        - name: shared-data
+          mountPath: /app
+          subPath: "Bibliography Final Draft.pdf"
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/info
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/info
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: shared-data
+        emptyDir: {}
