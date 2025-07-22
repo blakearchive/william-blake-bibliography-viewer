@@ -3,14 +3,14 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for PyMuPDF and wget
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    musl-dev \
-    libffi-dev \
-    wget \
-    curl \
+# Install system dependencies for PyMuPDF and download tools
+RUN apt-get update && apt-get install -y 
+    gcc 
+    g++ 
+    musl-dev 
+    libffi-dev 
+    wget 
+    curl 
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -19,17 +19,28 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code (excluding PDF)
+# Copy application code (no PDF in repository anymore)
 COPY main.py .
 COPY PDF_SETUP.md .
 
-# Download the PDF from GitHub releases or direct URL
-# This avoids the Git LFS issue
-RUN wget -O "Bibliography Final Draft.pdf" \
-    "https://github.com/blakearchive/william-blake-bibliography-viewer/raw/main/backend/Bibliography%20Final%20Draft.pdf" \
-    || curl -L -o "Bibliography Final Draft.pdf" \
-    "https://github.com/blakearchive/william-blake-bibliography-viewer/raw/main/backend/Bibliography%20Final%20Draft.pdf" \
-    || echo "PDF download failed - will need manual upload"
+# Download PDF from GitHub release (this avoids Git LFS entirely)
+RUN echo "Downloading PDF from GitHub release..." && 
+    curl -L -o "Bibliography Final Draft.pdf" 
+    "https://github.com/blakearchive/william-blake-bibliography-viewer/releases/download/v1.0.0/Bibliography-Final-Draft.pdf" 
+    && echo "PDF download completed: $(ls -lh 'Bibliography Final Draft.pdf')" 
+    || (echo "PDF download failed, will try at runtime" && echo "PDF download failed" > "Bibliography Final Draft.pdf")
+
+# Verify PDF file exists and has reasonable size
+RUN if [ -f "Bibliography Final Draft.pdf" ]; then 
+        FILE_SIZE=$(stat -c%s "Bibliography Final Draft.pdf" 2>/dev/null || stat -f%z "Bibliography Final Draft.pdf" 2>/dev/null); 
+        if [ "$FILE_SIZE" -gt 1000000 ]; then 
+            echo "PDF verified: ${FILE_SIZE} bytes"; 
+        else 
+            echo "Warning: PDF file seems too small (${FILE_SIZE} bytes)"; 
+        fi; 
+    else 
+        echo "Error: PDF file not found"; 
+    fi
 
 # Create non-root user for security
 RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app
