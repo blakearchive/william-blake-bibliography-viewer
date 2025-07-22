@@ -115,6 +115,14 @@ The deployment includes:
 - HTTPS-enabled public routes
 - High availability with multiple replicas
 - Health checks and resource management
+- OpenShift-compatible security contexts and permissions
+
+#### Recent Fixes Applied:
+- ✅ **Git LFS Resolution**: PDF hosted via GitHub releases (v1.0.0)
+- ✅ **Backend Permissions**: Uses `/tmp/indexdir` for OpenShift compatibility
+- ✅ **Frontend Assets**: Added missing `public/` directory to repository
+- ✅ **Nginx Service Discovery**: Uses OpenShift internal DNS resolver
+- ✅ **Container Permissions**: Fixed nginx cache directory permissions for restricted security context
 
 See [OPENSHIFT.md](OPENSHIFT.md) for detailed deployment instructions, architecture overview, and troubleshooting guide.
 
