@@ -15,8 +15,8 @@ COPY . .
 # Build the React app
 RUN npm run build
 
-# Production stage with nginx
-FROM nginx:alpine
+# Production stage with nginx-unprivileged (designed for restricted environments)
+FROM nginxinc/nginx-unprivileged:alpine
 
 # Remove default nginx configurations to avoid conflicts
 RUN rm -rf /etc/nginx/conf.d/* && \
@@ -28,19 +28,11 @@ COPY nginx.conf /etc/nginx/nginx.conf
 # Copy built React app
 COPY --from=build /app/build /usr/share/nginx/html
 
-# Create non-root user and set up directories
-RUN addgroup -g 1001 -S appgroup && \
-    adduser -S appuser -u 1001 -G appgroup -h /home/appuser && \
-    chown -R appuser:appgroup /usr/share/nginx/html && \
-    chown -R appuser:appgroup /etc/nginx && \
-    chown -R appuser:appgroup /home/appuser && \
-    mkdir -p /tmp/client_temp /tmp/proxy_temp_path /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp && \
-    chown -R appuser:appgroup /tmp/client_temp /tmp/proxy_temp_path /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
-
+# nginx-unprivileged already runs as non-root user with proper permissions
 # Switch to non-root user
-USER appuser
+USER 101
 
-# Expose port
+# Expose port (nginx-unprivileged uses 8080 by default)
 EXPOSE 8080
 
 # Start nginx
