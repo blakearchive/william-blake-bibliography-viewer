@@ -25,6 +25,10 @@ RUN rm -rf /etc/nginx/conf.d/* && \
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
 
+# Copy custom startup script
+COPY start-nginx.sh /usr/local/bin/start-nginx.sh
+RUN chmod +x /usr/local/bin/start-nginx.sh
+
 # Copy built React app
 COPY --from=build /app/build /usr/share/nginx/html
 
@@ -35,5 +39,5 @@ USER 101
 # Expose port (nginx-unprivileged uses 8080 by default)
 EXPOSE 8080
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start nginx using custom script
+CMD ["/usr/local/bin/start-nginx.sh"]
