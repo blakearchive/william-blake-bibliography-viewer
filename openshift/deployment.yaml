@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: blake-bibliography-backend:latest
+        image: grantglass/blake-pdf-backend:latest
         ports:
         - containerPort: 8000
         env:
@@ -91,7 +91,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: blake-bibliography-frontend:latest
+        image: grantglass/blake-pdf-frontend:latest
         ports:
         - containerPort: 8080
         resources:

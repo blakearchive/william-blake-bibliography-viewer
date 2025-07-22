@@ -25,9 +25,8 @@ RUN rm -rf /etc/nginx/conf.d/* && \
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Copy custom startup script
-COPY start-nginx.sh /usr/local/bin/start-nginx.sh
-RUN chmod +x /usr/local/bin/start-nginx.sh
+# Copy custom startup script with executable permissions
+COPY --chmod=755 start-nginx.sh /usr/local/bin/start-nginx.sh
 
 # Copy built React app
 COPY --from=build /app/build /usr/share/nginx/html
