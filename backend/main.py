@@ -1,10 +1,11 @@
 
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import List, Optional
 import fitz  # PyMuPDF
 import os
+import urllib.request
 from whoosh.index import create_in, open_dir
 from whoosh.fields import Schema, TEXT, NUMERIC
 from whoosh.qparser import QueryParser
@@ -16,6 +17,27 @@ PDF_PATH = os.path.join(os.path.dirname(__file__), "Bibliography Final Draft.pdf
 INDEX_DIR = os.path.join(os.path.dirname(__file__), "indexdir")
 
 app = FastAPI()
+
+# Check if PDF exists, if not try to download it
+def ensure_pdf_exists():
+    if not os.path.exists(PDF_PATH):
+        print(f"PDF not found at {PDF_PATH}, attempting to download...")
+        try:
+            pdf_url = "https://github.com/blakearchive/william-blake-bibliography-viewer/raw/main/backend/Bibliography%20Final%20Draft.pdf"
+            urllib.request.urlretrieve(pdf_url, PDF_PATH)
+            print(f"PDF downloaded successfully to {PDF_PATH}")
+        except Exception as e:
+            print(f"Failed to download PDF: {e}")
+            raise HTTPException(
+                status_code=503, 
+                detail="PDF file not available. Please ensure the PDF is properly uploaded to the container."
+            )
+
+# Ensure PDF is available on startup
+try:
+    ensure_pdf_exists()
+except Exception as e:
+    print(f"Warning: PDF initialization failed: {e}")
 
 @lru_cache(maxsize=128)
 def get_page_image(page_num: int):

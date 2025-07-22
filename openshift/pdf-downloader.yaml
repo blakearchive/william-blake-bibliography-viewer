@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blake-pdf-config
+  namespace: blake-bibliography
+data:
+  download-pdf.sh: |
+    #!/bin/bash
+    PDF_URL="https://github.com/blakearchive/william-blake-bibliography-viewer/raw/main/backend/Bibliography%20Final%20Draft.pdf"
+    PDF_PATH="/app/Bibliography Final Draft.pdf"
+    
+    echo "Downloading PDF from GitHub..."
+    if curl -L -o "$PDF_PATH" "$PDF_URL"; then
+        echo "PDF downloaded successfully"
+        ls -lh "$PDF_PATH"
+    else
+        echo "Failed to download PDF"
+        exit 1
+    fi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: blake-pdf-downloader
+  namespace: blake-bibliography
+spec:
+  template:
+    spec:
+      containers:
+      - name: pdf-downloader
+        image: curlimages/curl:latest
+        command: ["/bin/sh"]
+        args: ["/scripts/download-pdf.sh"]
+        volumeMounts:
+        - name: pdf-volume
+          mountPath: /app
+        - name: script-volume
+          mountPath: /scripts
+      volumes:
+      - name: pdf-volume
+        persistentVolumeClaim:
+          claimName: blake-pdf-storage
+      - name: script-volume
+        configMap:
+          name: blake-pdf-config
+          defaultMode: 0755
+      restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: blake-pdf-storage
+  namespace: blake-bibliography
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
