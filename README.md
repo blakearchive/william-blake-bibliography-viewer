@@ -206,3 +206,4 @@ This application was specifically designed for academic research and bibliograph
 2. Install frontend dependencies and start React app
 
 See each folder for more details.
+# Updated Tue Jul 22 00:23:16 EDT 2025
