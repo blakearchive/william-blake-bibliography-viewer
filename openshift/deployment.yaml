@@ -25,6 +25,7 @@ spec:
       containers:
       - name: backend
         image: grantglass/blake-pdf-backend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
         env:
@@ -92,6 +93,7 @@ spec:
       containers:
       - name: frontend
         image: grantglass/blake-pdf-frontend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
         resources:
@@ -115,7 +117,6 @@ spec:
           periodSeconds: 5
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001
           allowPrivilegeEscalation: false
           capabilities:
             drop:
