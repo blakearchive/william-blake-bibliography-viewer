@@ -19,24 +19,16 @@ RUN npm run build
 FROM nginxinc/nginx-unprivileged:alpine
 
 # Remove default nginx configurations to avoid conflicts
-RUN rm -rf /etc/nginx/conf.d/* && \
-    rm -f /etc/nginx/nginx.conf
+RUN rm -rf /etc/nginx/conf.d/*
 
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
-
-# Copy custom startup script with executable permissions
-COPY --chmod=755 start-nginx.sh /usr/local/bin/start-nginx.sh
+# Copy custom server configuration (not full nginx.conf)
+COPY nginx-server.conf /etc/nginx/conf.d/default.conf
 
 # Copy built React app
 COPY --from=build /app/build /usr/share/nginx/html
 
-# nginx-unprivileged already runs as non-root user with proper permissions
-# Switch to non-root user
-USER 101
-
 # Expose port (nginx-unprivileged uses 8080 by default)
 EXPOSE 8080
 
-# Start nginx using custom script
-CMD ["/usr/local/bin/start-nginx.sh"]
+# Use default nginx-unprivileged entrypoint
+CMD ["nginx", "-g", "daemon off;"]
