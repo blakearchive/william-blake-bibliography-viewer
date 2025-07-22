@@ -9,7 +9,13 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
+# Copy public directory first (required for React build)
+COPY public/ ./public/
+
 # Copy source code
+COPY src/ ./src/
+
+# Copy any remaining files
 COPY . .
 
 # Debug: List contents to verify files are copied
