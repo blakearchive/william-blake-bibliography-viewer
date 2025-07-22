@@ -125,9 +125,9 @@ The deployment includes:
 - ✅ **Container Permissions**: Fixed nginx cache directory permissions for restricted security context
 - ✅ **Nginx Configuration**: Optimized for containerized environment with stderr logging
 - ✅ **Unprivileged Nginx**: Switched to `nginxinc/nginx-unprivileged` for maximum OpenShift compatibility
-- ✅ **PID File Solution**: Set nginx PID to `/dev/null` to prevent permission errors
+- ✅ **Custom Startup Script**: Bypasses PID file creation with command-line override
 
-**Status**: Maximum security context compatibility achieved. All known OpenShift deployment blockers resolved.
+**Status**: Ultimate compatibility solution deployed. Custom startup script handles edge cases in restrictive environments.
 
 See [OPENSHIFT.md](OPENSHIFT.md) for detailed deployment instructions, architecture overview, and troubleshooting guide.
 
