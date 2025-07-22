@@ -30,6 +30,22 @@ A full-stack web application for serving and navigating large PDF documents with
 
 ## Installation
 
+### Quick Start (Recommended)
+
+The easiest way to run the application locally is using the provided startup script:
+
+```bash
+./start.sh
+```
+
+This script will:
+1. Set up a Python virtual environment
+2. Install all dependencies (backend and frontend)
+3. Start both servers
+4. Open the application in your browser
+
+### Manual Installation
+
 ### Prerequisites
 - Python 3.8+
 - Node.js 14+
@@ -78,6 +94,29 @@ npm start
 ```
 
 The application will be available at `http://localhost:3000`
+
+## Deployment
+
+### OpenShift Deployment
+
+For production deployment on Red Hat OpenShift:
+
+```bash
+# Login to your OpenShift cluster
+oc login <your-openshift-cluster-url>
+
+# Deploy the application
+./deploy-openshift.sh
+```
+
+The deployment includes:
+- Containerized backend (FastAPI) and frontend (React + Nginx)
+- Automatic builds from GitHub repository
+- HTTPS-enabled public routes
+- High availability with multiple replicas
+- Health checks and resource management
+
+See [OPENSHIFT.md](OPENSHIFT.md) for detailed deployment instructions, architecture overview, and troubleshooting guide.
 
 ## API Endpoints
 
