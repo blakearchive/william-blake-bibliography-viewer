@@ -14,7 +14,8 @@ from io import BytesIO
 from rapidfuzz import fuzz, process
 
 PDF_PATH = os.path.join(os.path.dirname(__file__), "Bibliography Final Draft.pdf")
-INDEX_DIR = os.path.join(os.path.dirname(__file__), "indexdir")
+# Use /tmp for index directory in containerized environments
+INDEX_DIR = os.getenv('SEARCH_INDEX_DIR', '/tmp/indexdir')
 
 app = FastAPI()
 
@@ -113,45 +114,58 @@ def extract_bookmarks_hierarchical():
     return build_tree(toc)
 
 def build_search_index():
-    if not os.path.exists(INDEX_DIR):
-        os.mkdir(INDEX_DIR)
-    schema = Schema(page=NUMERIC(stored=True), content=TEXT(stored=True))
-    ix = create_in(INDEX_DIR, schema)
-    writer = ix.writer()
-    doc = get_pdf()
-    for page_num in range(doc.page_count):
-        text = doc.load_page(page_num).get_text()
-        writer.add_document(page=page_num+1, content=text)
-    writer.commit()
+    try:
+        if not os.path.exists(INDEX_DIR):
+            os.makedirs(INDEX_DIR, exist_ok=True)
+        schema = Schema(page=NUMERIC(stored=True), content=TEXT(stored=True))
+        ix = create_in(INDEX_DIR, schema)
+        writer = ix.writer()
+        doc = get_pdf()
+        for page_num in range(doc.page_count):
+            text = doc.load_page(page_num).get_text()
+            writer.add_document(page=page_num+1, content=text)
+        writer.commit()
+        print(f"Search index built successfully at {INDEX_DIR}")
+    except PermissionError as e:
+        print(f"Permission error creating index directory {INDEX_DIR}: {e}")
+        print("Search functionality will be disabled")
+        return False
+    except Exception as e:
+        print(f"Error building search index: {e}")
+        return False
+    return True
 
 def ensure_index():
     if not os.path.exists(INDEX_DIR):
-        build_search_index()
+        return build_search_index()
+    return True
 
 def search_pdf(query, fuzzy=False):
-    ensure_index()
-    ix = open_dir(INDEX_DIR)
-    qp = QueryParser("content", schema=ix.schema)
-    q = qp.parse(query)
-    results = []
-    with ix.searcher() as s:
-        hits = s.search(q, limit=20)
-        for hit in hits:
-            snippet = hit.highlights("content")
-            results.append({"page": hit["page"], "snippet": snippet})
-    if fuzzy and not results:
-        # Fuzzy search fallback
-        all_text = [(hit["page"], hit["content"]) for hit in s.documents()]
-        matches = process.extract(query, [t[1] for t in all_text], scorer=fuzz.partial_ratio, limit=10)
-        for match in matches:
-            idx = match[2]
-            page = all_text[idx][0]
-            results.append({"page": page, "snippet": match[0]})
-    return results
+    if not ensure_index():
+        # Return empty results if indexing fails
+        return []
+    
+    try:
+        ix = open_dir(INDEX_DIR)
+        qp = QueryParser("content", schema=ix.schema)
+        q = qp.parse(query)
+        
+        with ix.searcher() as searcher:
+            results = searcher.search(q, limit=50)
+            return [{"page": result["page"], "content": result["content"][:200] + "..."} 
+                    for result in results]
+    except Exception as e:
+        print(f"Search error: {e}")
+        return []
 
 @app.on_event("startup")
 def startup_event():
-    ensure_index()
+    print("Starting Blake Bibliography Backend...")
+    print(f"Search index directory: {INDEX_DIR}")
+    if ensure_index():
+        print("Search index initialized successfully")
+    else:
+        print("Warning: Search index initialization failed, search will be disabled")
 
 @app.get("/api/page/{page_num}")
 def get_page(page_num: int):
