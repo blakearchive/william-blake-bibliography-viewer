@@ -12,9 +12,6 @@ RUN npm install
 # Copy application source
 COPY . .
 
-# Debug: List contents to verify files are copied
-RUN ls -la /app && echo "=== Contents of public directory ===" && ls -la /app/public/
-
 # Build the React app
 RUN npm run build
 
