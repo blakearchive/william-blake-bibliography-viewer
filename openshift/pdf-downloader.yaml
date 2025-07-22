@@ -6,15 +6,30 @@ metadata:
 data:
   download-pdf.sh: |
     #!/bin/bash
-    PDF_URL="https://github.com/blakearchive/william-blake-bibliography-viewer/raw/main/backend/Bibliography%20Final%20Draft.pdf"
+    PDF_URL="https://github.com/blakearchive/william-blake-bibliography-viewer/releases/download/v1.0.0/Bibliography-Final-Draft.pdf"
     PDF_PATH="/app/Bibliography Final Draft.pdf"
     
-    echo "Downloading PDF from GitHub..."
+    echo "Downloading PDF from GitHub release..."
+    
+    # Try with GitHub token if available
+    if [ ! -z "$GITHUB_TOKEN" ]; then
+        echo "Using GitHub token for authentication..."
+        if curl -L -H "Authorization: token $GITHUB_TOKEN" -o "$PDF_PATH" "$PDF_URL"; then
+            echo "PDF downloaded successfully with authentication"
+            ls -lh "$PDF_PATH"
+            exit 0
+        fi
+    fi
+    
+    # Try without authentication (for public releases)
+    echo "Trying without authentication..."
     if curl -L -o "$PDF_PATH" "$PDF_URL"; then
         echo "PDF downloaded successfully"
         ls -lh "$PDF_PATH"
     else
-        echo "Failed to download PDF"
+        echo "Failed to download PDF. For private repos, you may need:"
+        echo "1. Set GITHUB_TOKEN environment variable with a personal access token"
+        echo "2. Or make the release publicly accessible"
         exit 1
     fi
 ---
