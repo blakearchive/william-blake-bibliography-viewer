@@ -30,9 +30,10 @@ COPY --from=build /app/build /usr/share/nginx/html
 
 # Create non-root user and set up directories
 RUN addgroup -g 1001 -S appgroup && \
-    adduser -S appuser -u 1001 -G appgroup && \
+    adduser -S appuser -u 1001 -G appgroup -h /home/appuser && \
     chown -R appuser:appgroup /usr/share/nginx/html && \
     chown -R appuser:appgroup /etc/nginx && \
+    chown -R appuser:appgroup /home/appuser && \
     mkdir -p /tmp/client_temp /tmp/proxy_temp_path /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp && \
     chown -R appuser:appgroup /tmp/client_temp /tmp/proxy_temp_path /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
 
