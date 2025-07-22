@@ -1,0 +1,201 @@
+
+
+from fastapi import FastAPI, Query
+from fastapi.responses import StreamingResponse, JSONResponse
+from typing import List, Optional
+import fitz  # PyMuPDF
+import os
+from whoosh.index import create_in, open_dir
+from whoosh.fields import Schema, TEXT, NUMERIC
+from whoosh.qparser import QueryParser
+from functools import lru_cache
+from io import BytesIO
+from rapidfuzz import fuzz, process
+
+PDF_PATH = os.path.join(os.path.dirname(__file__), "Bibliography Final Draft.pdf")
+INDEX_DIR = os.path.join(os.path.dirname(__file__), "indexdir")
+
+app = FastAPI()
+
+@lru_cache(maxsize=128)
+def get_page_image(page_num: int):
+    doc = fitz.open(PDF_PATH)
+    page = doc.load_page(page_num - 1)
+    img = page.get_pixmap()
+    img_bytes = BytesIO(img.tobytes("png"))
+    return img_bytes
+
+@lru_cache(maxsize=128)
+def get_page_text_blocks(page_num: int):
+    """Extract text blocks with coordinates for a page"""
+    doc = fitz.open(PDF_PATH)
+    page = doc.load_page(page_num - 1)
+    
+    # Get text blocks with coordinates
+    text_blocks = page.get_text("dict")
+    
+    # Extract text with bounding boxes
+    result = {
+        "page": page_num,
+        "width": page.rect.width,
+        "height": page.rect.height,
+        "blocks": []
+    }
+    
+    for block in text_blocks["blocks"]:
+        if "lines" in block:  # Text block
+            block_data = {
+                "bbox": block["bbox"],  # [x0, y0, x1, y1]
+                "lines": []
+            }
+            
+            for line in block["lines"]:
+                line_data = {
+                    "bbox": line["bbox"],
+                    "spans": []
+                }
+                
+                for span in line["spans"]:
+                    span_data = {
+                        "text": span["text"],
+                        "bbox": span["bbox"],
+                        "font": span["font"],
+                        "size": span["size"],
+                        "flags": span["flags"]
+                    }
+                    line_data["spans"].append(span_data)
+                
+                block_data["lines"].append(line_data)
+            
+            result["blocks"].append(block_data)
+    
+    return result
+
+def get_pdf():
+    return fitz.open(PDF_PATH)
+
+def extract_bookmarks_hierarchical():
+    doc = get_pdf()
+    toc = doc.get_toc()
+    def build_tree(toc):
+        tree = []
+        stack = [(0, tree)]
+        for item in toc:
+            level, title, page = item[:3]
+            node = {"title": title, "page": page, "children": []}
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            stack[-1][1].append(node)
+            stack.append((level, node["children"]))
+        return tree
+    return build_tree(toc)
+
+def build_search_index():
+    if not os.path.exists(INDEX_DIR):
+        os.mkdir(INDEX_DIR)
+    schema = Schema(page=NUMERIC(stored=True), content=TEXT(stored=True))
+    ix = create_in(INDEX_DIR, schema)
+    writer = ix.writer()
+    doc = get_pdf()
+    for page_num in range(doc.page_count):
+        text = doc.load_page(page_num).get_text()
+        writer.add_document(page=page_num+1, content=text)
+    writer.commit()
+
+def ensure_index():
+    if not os.path.exists(INDEX_DIR):
+        build_search_index()
+
+def search_pdf(query, fuzzy=False):
+    ensure_index()
+    ix = open_dir(INDEX_DIR)
+    qp = QueryParser("content", schema=ix.schema)
+    q = qp.parse(query)
+    results = []
+    with ix.searcher() as s:
+        hits = s.search(q, limit=20)
+        for hit in hits:
+            snippet = hit.highlights("content")
+            results.append({"page": hit["page"], "snippet": snippet})
+    if fuzzy and not results:
+        # Fuzzy search fallback
+        all_text = [(hit["page"], hit["content"]) for hit in s.documents()]
+        matches = process.extract(query, [t[1] for t in all_text], scorer=fuzz.partial_ratio, limit=10)
+        for match in matches:
+            idx = match[2]
+            page = all_text[idx][0]
+            results.append({"page": page, "snippet": match[0]})
+    return results
+
+@app.on_event("startup")
+def startup_event():
+    ensure_index()
+
+@app.get("/api/page/{page_num}")
+def get_page(page_num: int):
+    try:
+        doc = get_pdf()
+        if page_num < 1 or page_num > doc.page_count:
+            return JSONResponse({"error": "Page out of range"}, status_code=404)
+        img_bytes = get_page_image(page_num)
+        img_bytes.seek(0)
+        return StreamingResponse(img_bytes, media_type="image/png")
+    except Exception as e:
+        print(f"Error loading page {page_num}: {e}")
+        return JSONResponse({"error": f"Failed to load page {page_num}"}, status_code=500)
+
+@app.get("/api/info")
+def get_pdf_info():
+    """Get PDF information including total page count"""
+    try:
+        doc = get_pdf()
+        return {
+            "total_pages": doc.page_count,
+            "title": doc.metadata.get("title", "Bibliography Final Draft"),
+            "author": doc.metadata.get("author", ""),
+        }
+    except Exception as e:
+        print(f"Error getting PDF info: {e}")
+        return JSONResponse({"error": "Failed to get PDF information"}, status_code=500)
+
+@app.get("/api/page/{page_num}/text")
+def get_page_text(page_num: int):
+    """Get text blocks with coordinates for a specific page"""
+    try:
+        doc = get_pdf()
+        if page_num < 1 or page_num > doc.page_count:
+            return JSONResponse({"error": "Page out of range"}, status_code=404)
+        text_data = get_page_text_blocks(page_num)
+        return JSONResponse(text_data)
+    except Exception as e:
+        print(f"Error loading text for page {page_num}: {e}")
+        return JSONResponse({"error": f"Failed to load text for page {page_num}"}, status_code=500)
+
+@app.get("/api/bookmarks")
+def get_bookmarks():
+    return JSONResponse({"bookmarks": extract_bookmarks_hierarchical()})
+
+@app.get("/api/search")
+def search(query: str = Query(...), fuzzy: bool = Query(False)):
+    results = search_pdf(query, fuzzy=fuzzy)
+    return JSONResponse({"results": results})
+
+@app.get("/api/anchor/{anchor_title}")
+def jump_to_anchor(anchor_title: str):
+    bookmarks = extract_bookmarks_hierarchical()
+    def find_anchor(tree, title):
+        for node in tree:
+            if node["title"] == title:
+                return node["page"]
+            result = find_anchor(node["children"], title)
+            if result:
+                return result
+        return None
+    page = find_anchor(bookmarks, anchor_title)
+    if page:
+        return JSONResponse({"page": page})
+    return JSONResponse({"error": "Anchor not found"}, status_code=404)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
