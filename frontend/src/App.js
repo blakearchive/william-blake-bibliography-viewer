@@ -258,7 +258,7 @@ function App() {
         {results.length > 0 && (
           <div style={{ marginBottom: 20, padding: 12, backgroundColor: '#f8f9fa', borderRadius: 8, border: '1px solid #e0e0e0' }}>
             <h3 style={{ color: '#7c6f57', marginBottom: 12, fontSize: '1.1em' }}>Search Results</h3>
-            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            <div style={{ maxHeight: 400, minWidth: 500, overflowY: 'auto' }}>
               {results.map((r, idx) => (
                 <div key={idx} className="search-result" style={{ marginBottom: 8, padding: 8, backgroundColor: '#fff', borderRadius: 4 }}>
                   <span className="anchor-link" onClick={() => handleJump(r.page)} style={{ fontWeight: 600, color: '#1976d2' }}>

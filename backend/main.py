@@ -152,8 +152,18 @@ def search_pdf(query, fuzzy=False):
         
         with ix.searcher() as searcher:
             results = searcher.search(q, limit=50)
-            return [{"page": result["page"], "content": result["content"][:200] + "..."} 
-                    for result in results]
+            output = []
+            for result in results:
+                content = result["content"]
+                # Find the line containing the query (case-insensitive)
+                lines = content.splitlines()
+                match_line = next((line for line in lines if query.lower() in line.lower()), "")
+                output.append({
+                    "page": result["page"],
+                    "content": content[:200] + "...",
+                    "line": match_line
+                })
+            return output
     except Exception as e:
         print(f"Search error: {e}")
         return []
