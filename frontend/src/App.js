@@ -263,7 +263,17 @@ function App() {
                 <div key={idx} className="search-result" style={{ marginBottom: 8, padding: 8, backgroundColor: '#fff', borderRadius: 4 }}>
                   <span className="anchor-link" onClick={() => handleJump(r.page)} style={{ fontWeight: 600, color: '#1976d2' }}>
                     Page {r.page}
-                  </span>: <span dangerouslySetInnerHTML={{ __html: r.snippet }} />
+                  </span>
+                  {r.line && (
+                    <div style={{ marginTop: 4, color: '#333', fontStyle: 'italic' }}>
+                      {r.line}
+                    </div>
+                  )}
+                  {r.content && (
+                    <div style={{ marginTop: 2, color: '#666', fontSize: '0.95em' }}>
+                      <span dangerouslySetInnerHTML={{ __html: r.content }} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
