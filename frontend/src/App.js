@@ -43,14 +43,15 @@ function PrefatoryMaterialTree({ onJump }) {
 function BookmarkTree({ bookmarks, onJump }) {
   if (!bookmarks || bookmarks.length === 0) return null;
   return (
-    <ul>
+    <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
       {bookmarks.map((bm, idx) => (
         <li key={idx}>
-          <span className="bookmark-title anchor-link" onClick={() => onJump(bm.page)}>{bm.title}</span>
-          {bm.children && bm.children.length > 0 && (
-            <div className="bookmark-children">
+          {bm.children && bm.children.length > 0 ? (
+            <CollapsibleSection title={bm.title} defaultOpen={false}>
               <BookmarkTree bookmarks={bm.children} onJump={onJump} />
-            </div>
+            </CollapsibleSection>
+          ) : (
+            <span className="bookmark-title anchor-link" onClick={() => onJump(bm.page)}>{bm.title}</span>
           )}
         </li>
       ))}
