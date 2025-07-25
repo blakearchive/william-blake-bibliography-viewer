@@ -340,6 +340,9 @@ function App() {
             </div>
           </div>
         )}
+    {/* End main App component */}
+}
+
 // Highlight search terms in a line (case-insensitive)
 function highlightTerms(line, search) {
   if (!search) return line;
