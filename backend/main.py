@@ -162,13 +162,12 @@ def search_pdf(query, fuzzy=False):
         ix = open_dir(INDEX_DIR)
         qp = QueryParser("content", schema=ix.schema)
         q = qp.parse(query)
-        
         with ix.searcher() as searcher:
-            results = searcher.search(q, limit=50)
+            # Get all results (no limit)
+            results = searcher.search(q, limit=None)
             output = []
             for result in results:
                 content = result["content"]
-                # Find the line containing the query (case-insensitive)
                 lines = content.splitlines()
                 match_line = next((line for line in lines if query.lower() in line.lower()), "")
                 output.append({
@@ -235,9 +234,24 @@ def get_bookmarks():
     return JSONResponse({"bookmarks": extract_bookmarks_hierarchical()})
 
 @app.get("/api/search")
-def search(query: str = Query(...), fuzzy: bool = Query(False)):
-    results = search_pdf(query, fuzzy=fuzzy)
-    return JSONResponse({"results": results})
+def search(
+    query: str = Query(...),
+    fuzzy: bool = Query(False),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500)
+):
+    all_results = search_pdf(query, fuzzy=fuzzy)
+    total_results = len(all_results)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_results = all_results[start:end]
+    return JSONResponse({
+        "results": paginated_results,
+        "total_results": total_results,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total_results + page_size - 1) // page_size
+    })
 
 @app.get("/api/anchor/{anchor_title}")
 def jump_to_anchor(anchor_title: str):

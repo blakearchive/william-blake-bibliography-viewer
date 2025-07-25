@@ -69,6 +69,10 @@ import SelectablePageViewer from './SelectablePageViewer';
 function App() {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState([]);
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchPageSize, setSearchPageSize] = useState(50);
+  const [searchTotalPages, setSearchTotalPages] = useState(1);
+  const [searchTotalResults, setSearchTotalResults] = useState(0);
   const [bookmarks, setBookmarks] = useState([]);
   const [pageNum, setPageNum] = useState(1);
   const [pageImg, setPageImg] = useState(null);
@@ -118,9 +122,27 @@ function App() {
     fetchPage();
   }, [pageNum]);
 
-  const handleSearch = async () => {
-    const res = await axios.get(`/api/search?query=${encodeURIComponent(search)}`);
+  const fetchSearchResults = async (page = 1, pageSize = searchPageSize) => {
+    const res = await axios.get(`/api/search?query=${encodeURIComponent(search)}&page=${page}&page_size=${pageSize}`);
     setResults(res.data.results);
+    setSearchPage(page);
+    setSearchPageSize(pageSize);
+    setSearchTotalPages(res.data.total_pages);
+    setSearchTotalResults(res.data.total_results);
+  };
+
+  const handleSearch = async () => {
+    fetchSearchResults(1, searchPageSize);
+  };
+
+  const handleSearchPageChange = (newPage) => {
+    fetchSearchResults(newPage, searchPageSize);
+  };
+
+  const handleSearchPageSizeChange = (e) => {
+    const newSize = parseInt(e.target.value, 10);
+    setSearchPageSize(newSize);
+    fetchSearchResults(1, newSize);
   };
 
   // Load all pages for continuous view
@@ -255,10 +277,26 @@ function App() {
           </div>
         </div>
         
-        {/* Search Results - Now in a collapsible section */}
+        {/* Search Results - Now in a collapsible section with pagination */}
         {results.length > 0 && (
           <div style={{ marginBottom: 20, padding: 12, backgroundColor: '#f8f9fa', borderRadius: 8, border: '1px solid #e0e0e0' }}>
             <h3 style={{ color: '#7c6f57', marginBottom: 12, fontSize: '1.1em' }}>Search Results</h3>
+            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 16 }}>
+              <span style={{ fontSize: '0.95em', color: '#666' }}>
+                Showing {results.length} of {searchTotalResults} result{searchTotalResults !== 1 ? 's' : ''}
+              </span>
+              <span style={{ fontSize: '0.95em', color: '#666' }}>
+                Page {searchPage} of {searchTotalPages}
+              </span>
+              <button onClick={() => handleSearchPageChange(searchPage - 1)} disabled={searchPage <= 1} style={{ padding: '4px 10px', borderRadius: 4 }}>Prev</button>
+              <button onClick={() => handleSearchPageChange(searchPage + 1)} disabled={searchPage >= searchTotalPages} style={{ padding: '4px 10px', borderRadius: 4 }}>Next</button>
+              <label style={{ marginLeft: 8 }}>Page Size:</label>
+              <select value={searchPageSize} onChange={handleSearchPageSizeChange} style={{ padding: '2px 8px', borderRadius: 4 }}>
+                {[25, 50, 100, 200, 500].map(size => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+            </div>
             <div style={{ maxHeight: 400, minWidth: 500, overflowY: 'auto' }}>
               {results.map((r, idx) => (
                 <div key={idx} className="search-result" style={{ marginBottom: 8, padding: 8, backgroundColor: '#fff', borderRadius: 4 }}>
