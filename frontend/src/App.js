@@ -148,43 +148,58 @@ function App() {
   // Load all pages for continuous view
   const loadAllPages = async () => {
     if (allPages.length > 0) return; // Already loaded
-    
     setLoading(true);
     setError('');
     const pages = [];
-    
+    const failedPages = [];
+
+    const fetchPageWithRetry = async (pageNum, retries = 3) => {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const response = await axios.get(`/api/page/${pageNum}`, {
+            responseType: 'blob',
+            timeout: 10000
+          });
+          return {
+            pageNum,
+            imageUrl: URL.createObjectURL(response.data)
+          };
+        } catch (error) {
+          if (attempt === retries) {
+            failedPages.push(pageNum);
+            return {
+              pageNum,
+              imageUrl: null,
+              error: `Failed to load page ${pageNum}`
+            };
+          }
+          await new Promise(res => setTimeout(res, 1000)); // Wait before retry
+        }
+      }
+    };
+
     try {
       // Load pages in chunks of 50 for better performance
       const chunkSize = 50;
       const totalChunks = Math.ceil(totalPages / chunkSize);
-      
       for (let chunk = 0; chunk < totalChunks; chunk++) {
         const startPage = chunk * chunkSize + 1;
         const endPage = Math.min((chunk + 1) * chunkSize, totalPages);
-        
         const chunkPromises = [];
         for (let i = startPage; i <= endPage; i++) {
-          chunkPromises.push(
-            axios.get(`/api/page/${i}`, {
-              responseType: 'blob',
-              timeout: 10000
-            }).then(response => ({
-              pageNum: i,
-              imageUrl: URL.createObjectURL(response.data)
-            }))
-          );
+          chunkPromises.push(fetchPageWithRetry(i));
         }
-        
         try {
           const chunkPages = await Promise.all(chunkPromises);
           pages.push(...chunkPages);
           setAllPages([...pages]); // Update UI progressively
         } catch (chunkError) {
           console.error(`Error loading chunk ${chunk + 1}:`, chunkError);
-          // Continue with next chunk instead of failing completely
         }
       }
-      
+      if (failedPages.length > 0) {
+        setError(`Failed to load ${failedPages.length} page(s). Try refreshing or switching to Single Page mode.`);
+      }
     } catch (error) {
       console.error('Error loading pages:', error);
       setError('Failed to load pages for continuous view');
@@ -437,17 +452,23 @@ function App() {
                         <div style={{ fontSize: '1.2em', fontWeight: 600, color: '#1976d2', marginBottom: 8 }}>
                           Page {page.pageNum}
                         </div>
-                        <SelectablePageViewer 
-                          pageNum={page.pageNum}
-                          imageUrl={page.imageUrl}
-                          style={{ 
-                            maxWidth: '900px', 
-                            width: '100%', 
-                            boxShadow: '0 4px 24px #e0e0e0', 
-                            border: '2px solid #1976d2', 
-                            background: '#fff' 
-                          }}
-                        />
+                        {page.imageUrl ? (
+                          <SelectablePageViewer 
+                            pageNum={page.pageNum}
+                            imageUrl={page.imageUrl}
+                            style={{ 
+                              maxWidth: '900px', 
+                              width: '100%', 
+                              boxShadow: '0 4px 24px #e0e0e0', 
+                              border: '2px solid #1976d2', 
+                              background: '#fff' 
+                            }}
+                          />
+                        ) : (
+                          <div style={{ color: 'red', padding: 12, backgroundColor: '#fff2f2', borderRadius: 8 }}>
+                            {page.error || `Loading page ${page.pageNum}...`}
+                          </div>
+                        )}
                       </div>
                     ))}
                     {loading && (
