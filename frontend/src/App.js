@@ -80,6 +80,7 @@ function App() {
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState('single'); // 'single' or 'continuous'
   const [totalPages, setTotalPages] = useState(0);
+  // Handler functions
   const [allPages, setAllPages] = useState([]);
 
   useEffect(() => {
@@ -87,8 +88,6 @@ function App() {
     axios.get('/api/bookmarks').then(res => {
       setBookmarks(res.data.bookmarks);
     });
-    
-    // Fetch PDF info to get actual page count
     axios.get('/api/info').then(res => {
       setTotalPages(res.data.total_pages);
     }).catch(err => {
@@ -100,13 +99,13 @@ function App() {
   useEffect(() => {
     // Fetch page image when pageNum changes with retry logic
     setLoading(true);
-    setError(''); // Clear any previous errors
+    setError('');
     const fetchPage = async (retries = 3) => {
       try {
         const res = await axios.get(`/api/page/${pageNum}`, { responseType: 'blob' });
         setPageImg(URL.createObjectURL(res.data));
         setLoading(false);
-        setError(''); // Clear error on success
+        setError('');
       } catch (error) {
         if (retries > 0) {
           console.log(`Retrying page ${pageNum}, attempts left: ${retries}`);
@@ -147,12 +146,11 @@ function App() {
 
   // Load all pages for continuous view
   const loadAllPages = async () => {
-    if (allPages.length > 0) return; // Already loaded
+    if (allPages.length > 0) return;
     setLoading(true);
     setError('');
     const pages = [];
     const failedPages = [];
-
     const fetchPageWithRetry = async (pageNum, retries = 3) => {
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
@@ -173,13 +171,11 @@ function App() {
               error: `Failed to load page ${pageNum}`
             };
           }
-          await new Promise(res => setTimeout(res, 1000)); // Wait before retry
+          await new Promise(res => setTimeout(res, 1000));
         }
       }
     };
-
     try {
-      // Load pages in chunks of 50 for better performance
       const chunkSize = 50;
       const totalChunks = Math.ceil(totalPages / chunkSize);
       for (let chunk = 0; chunk < totalChunks; chunk++) {
@@ -192,7 +188,7 @@ function App() {
         try {
           const chunkPages = await Promise.all(chunkPromises);
           pages.push(...chunkPages);
-          setAllPages([...pages]); // Update UI progressively
+          setAllPages([...pages]);
         } catch (chunkError) {
           console.error(`Error loading chunk ${chunk + 1}:`, chunkError);
         }
@@ -220,7 +216,6 @@ function App() {
     if (viewMode === 'single') {
       setPageNum(page);
     } else {
-      // In continuous mode, scroll to the page
       const pageElement = document.getElementById(`page-${page}`);
       if (pageElement) {
         pageElement.scrollIntoView({ behavior: 'smooth' });
@@ -270,7 +265,6 @@ function App() {
               </div>
             </div>
           </div>
-          
           {/* Search moved to top right */}
           <div className="search-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, marginTop: 30 }}>
             <div className="search-bar" style={{ display: 'flex', gap: 8 }}>
@@ -291,7 +285,6 @@ function App() {
             )}
           </div>
         </div>
-        
         {/* Search Results - Now in a collapsible section with pagination and explanation */}
         {results.length > 0 && (
           <div style={{ marginBottom: 20, padding: 12, backgroundColor: '#f8f9fa', borderRadius: 8, border: '1px solid #e0e0e0' }}>
@@ -340,7 +333,109 @@ function App() {
             </div>
           </div>
         )}
-    {/* End main App component */}
+        {/* Main Page Content Area */}
+        <div className="page-content" style={{ flexGrow: 1 }}>
+          {/* Single Page View */}
+          {viewMode === 'single' && (
+            <div>
+              <h3 style={{ color: '#1976d2', marginBottom: 12, fontWeight: 600 }}>Page {pageNum}</h3>
+              {loading ? (
+                <div>Loading...</div>
+              ) : (
+                pageImg && (
+                  <SelectablePageViewer 
+                    pageNum={pageNum}
+                    imageUrl={pageImg}
+                    style={{ 
+                      maxWidth: '900px', 
+                      width: '100%', 
+                      boxShadow: '0 4px 24px #e0e0e0', 
+                      border: '2px solid #1976d2', 
+                      background: '#fff' 
+                    }}
+                  />
+                )
+              )}
+              <div className="nav-buttons">
+                <button 
+                  onClick={() => setPageNum(pageNum > 1 ? pageNum - 1 : 1)}
+                  disabled={pageNum <= 1}
+                >
+                  &lt; Prev
+                </button>
+                <span style={{ margin: '0 12px', color: '#666' }}>
+                  Page {pageNum} of {totalPages}
+                </span>
+                <button 
+                  onClick={() => setPageNum(pageNum < totalPages ? pageNum + 1 : totalPages)}
+                  disabled={pageNum >= totalPages}
+                >
+                  Next &gt;
+                </button>
+              </div>
+            </div>
+          )}
+          {/* Continuous View */}
+          {viewMode === 'continuous' && (
+            <div>
+              <h3 style={{ color: '#1976d2', marginBottom: 12, fontWeight: 600 }}>
+                Continuous View {allPages.length > 0 && `(${allPages.length}/${totalPages} pages loaded)`}
+              </h3>
+              {loading && allPages.length === 0 ? (
+                <div style={{ padding: 20, textAlign: 'center' }}>
+                  <div>Loading pages for continuous view...</div>
+                  <div style={{ fontSize: '0.9em', color: '#666', marginTop: 8 }}>
+                    This may take a moment...
+                  </div>
+                </div>
+              ) : (
+                <div className="continuous-pages" style={{ maxHeight: '80vh', overflowY: 'auto', border: '1px solid #e0e0e0', borderRadius: 8, padding: 16 }}>
+                  {allPages.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+                      Click "Continuous Scroll" to load all pages
+                    </div>
+                  ) : (
+                    <>
+                      {allPages.map((page) => (
+                        <div key={page.pageNum} id={`page-${page.pageNum}`} style={{ marginBottom: 20 }}>
+                          <div style={{ fontSize: '1.2em', fontWeight: 600, color: '#1976d2', marginBottom: 8 }}>
+                            Page {page.pageNum}
+                          </div>
+                          {page.imageUrl ? (
+                            <SelectablePageViewer 
+                              pageNum={page.pageNum}
+                              imageUrl={page.imageUrl}
+                              style={{ 
+                                maxWidth: '900px', 
+                                width: '100%', 
+                                boxShadow: '0 4px 24px #e0e0e0', 
+                                border: '2px solid #1976d2', 
+                                background: '#fff' 
+                              }}
+                            />
+                          ) : (
+                            <div style={{ color: 'red', padding: 12, backgroundColor: '#fff2f2', borderRadius: 8 }}>
+                              {page.error || `Loading page ${page.pageNum}...`}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {loading && (
+                        <div style={{ textAlign: 'center', padding: 20, color: '#666' }}>
+                          Loading more pages...
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+// ...existing code...
 }
 
 // Highlight search terms in a line (case-insensitive)
@@ -351,154 +446,6 @@ function highlightTerms(line, search) {
   if (terms.length === 0) return line;
   const regex = new RegExp(`(${terms.join('|')})`, 'gi');
   return line.replace(regex, '<mark style="background: #ffe066; color: #222;">$1</mark>');
-}
-              className={viewMode === 'single' ? 'btn-primary' : 'btn-secondary'}
-              onClick={() => handleViewModeChange('single')}
-              style={{ marginRight: 10 }}
-            >
-              Single Page
-            </button>
-            <button 
-              className={viewMode === 'continuous' ? 'btn-primary' : 'btn-secondary'}
-              onClick={() => handleViewModeChange('continuous')}
-            >
-              Continuous Scroll
-            </button>
-          </div>
-          <button 
-            onClick={() => handleJump(1)} 
-            style={{ 
-              padding: '8px 16px', 
-              backgroundColor: '#1976d2', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: 6, 
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '0.9em'
-            }}
-            title="Go to page 1"
-          >
-            Home
-          </button>
-        </div>
-        
-        {error && (
-          <div className="error-message" style={{ color: 'red', padding: 12, backgroundColor: '#fff2f2', borderRadius: 8, marginBottom: 20 }}>
-            {error}
-            <button 
-              onClick={() => window.location.reload()} 
-              style={{ marginLeft: 12, padding: '4px 8px', backgroundColor: '#1976d2', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}
-            >
-              Refresh Page
-            </button>
-          </div>
-        )}
-        
-        {/* Main Page Content Area */}
-        <div className="page-content" style={{ flexGrow: 1 }}>
-        
-        {/* Single Page View */}
-        {viewMode === 'single' && (
-          <div>
-            <h3 style={{ color: '#1976d2', marginBottom: 12, fontWeight: 600 }}>Page {pageNum}</h3>
-            {loading ? (
-              <div>Loading...</div>
-            ) : (
-              pageImg && (
-                <SelectablePageViewer 
-                  pageNum={pageNum}
-                  imageUrl={pageImg}
-                  style={{ 
-                    maxWidth: '900px', 
-                    width: '100%', 
-                    boxShadow: '0 4px 24px #e0e0e0', 
-                    border: '2px solid #1976d2', 
-                    background: '#fff' 
-                  }}
-                />
-              )
-            )}
-            <div className="nav-buttons">
-              <button 
-                onClick={() => setPageNum(pageNum > 1 ? pageNum - 1 : 1)}
-                disabled={pageNum <= 1}
-              >
-                &lt; Prev
-              </button>
-              <span style={{ margin: '0 12px', color: '#666' }}>
-                Page {pageNum} of {totalPages}
-              </span>
-              <button 
-                onClick={() => setPageNum(pageNum < totalPages ? pageNum + 1 : totalPages)}
-                disabled={pageNum >= totalPages}
-              >
-                Next &gt;
-              </button>
-            </div>
-          </div>
-        )}
-        
-        {/* Continuous View */}
-        {viewMode === 'continuous' && (
-          <div>
-            <h3 style={{ color: '#1976d2', marginBottom: 12, fontWeight: 600 }}>
-              Continuous View {allPages.length > 0 && `(${allPages.length}/${totalPages} pages loaded)`}
-            </h3>
-            {loading && allPages.length === 0 ? (
-              <div style={{ padding: 20, textAlign: 'center' }}>
-                <div>Loading pages for continuous view...</div>
-                <div style={{ fontSize: '0.9em', color: '#666', marginTop: 8 }}>
-                  This may take a moment...
-                </div>
-              </div>
-            ) : (
-              <div className="continuous-pages" style={{ maxHeight: '80vh', overflowY: 'auto', border: '1px solid #e0e0e0', borderRadius: 8, padding: 16 }}>
-                {allPages.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
-                    Click "Continuous Scroll" to load all pages
-                  </div>
-                ) : (
-                  <>
-                    {allPages.map((page) => (
-                      <div key={page.pageNum} id={`page-${page.pageNum}`} style={{ marginBottom: 20 }}>
-                        <div style={{ fontSize: '1.2em', fontWeight: 600, color: '#1976d2', marginBottom: 8 }}>
-                          Page {page.pageNum}
-                        </div>
-                        {page.imageUrl ? (
-                          <SelectablePageViewer 
-                            pageNum={page.pageNum}
-                            imageUrl={page.imageUrl}
-                            style={{ 
-                              maxWidth: '900px', 
-                              width: '100%', 
-                              boxShadow: '0 4px 24px #e0e0e0', 
-                              border: '2px solid #1976d2', 
-                              background: '#fff' 
-                            }}
-                          />
-                        ) : (
-                          <div style={{ color: 'red', padding: 12, backgroundColor: '#fff2f2', borderRadius: 8 }}>
-                            {page.error || `Loading page ${page.pageNum}...`}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {loading && (
-                      <div style={{ textAlign: 'center', padding: 20, color: '#666' }}>
-                        Loading more pages...
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        </div>
-      </main>
-    </div>
-  );
 }
 
 export default App;
