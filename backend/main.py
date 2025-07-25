@@ -163,17 +163,17 @@ def search_pdf(query, fuzzy=False):
         qp = QueryParser("content", schema=ix.schema)
         q = qp.parse(query)
         with ix.searcher() as searcher:
-            # Get all results (no limit)
             results = searcher.search(q, limit=None)
             output = []
             for result in results:
                 content = result["content"]
                 lines = content.splitlines()
-                match_line = next((line for line in lines if query.lower() in line.lower()), "")
+                # Find all lines containing the query (case-insensitive)
+                matching_lines = [line for line in lines if query.lower() in line.lower()]
                 output.append({
                     "page": result["page"],
                     "content": content[:200] + "...",
-                    "line": match_line
+                    "lines": matching_lines
                 })
             return output
     except Exception as e:

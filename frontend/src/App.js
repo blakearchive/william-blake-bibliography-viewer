@@ -292,10 +292,13 @@ function App() {
           </div>
         </div>
         
-        {/* Search Results - Now in a collapsible section with pagination */}
+        {/* Search Results - Now in a collapsible section with pagination and explanation */}
         {results.length > 0 && (
           <div style={{ marginBottom: 20, padding: 12, backgroundColor: '#f8f9fa', borderRadius: 8, border: '1px solid #e0e0e0' }}>
             <h3 style={{ color: '#7c6f57', marginBottom: 12, fontSize: '1.1em' }}>Search Results</h3>
+            <div style={{ marginBottom: 8, color: '#444', fontSize: '0.98em', background: '#fffbe6', padding: 8, borderRadius: 6 }}>
+              <strong>How search works:</strong> Each result shows all lines on the page that contain your search terms. If a page matches, you may need to visually scan the page for context. Search terms are highlighted below.
+            </div>
             <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 16 }}>
               <span style={{ fontSize: '0.95em', color: '#666' }}>
                 Showing {results.length} of {searchTotalResults} result{searchTotalResults !== 1 ? 's' : ''}
@@ -318,9 +321,13 @@ function App() {
                   <span className="anchor-link" onClick={() => handleJump(r.page)} style={{ fontWeight: 600, color: '#1976d2' }}>
                     Page {r.page}
                   </span>
-                  {r.line && (
-                    <div style={{ marginTop: 4, color: '#333', fontStyle: 'italic' }}>
-                      {r.line}
+                  {r.lines && r.lines.length > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      {r.lines.map((line, i) => (
+                        <div key={i} style={{ color: '#333', fontStyle: 'italic', marginBottom: 2 }}>
+                          <span dangerouslySetInnerHTML={{ __html: highlightTerms(line, search) }} />
+                        </div>
+                      ))}
                     </div>
                   )}
                   {r.content && (
@@ -333,6 +340,15 @@ function App() {
             </div>
           </div>
         )}
+// Highlight search terms in a line (case-insensitive)
+function highlightTerms(line, search) {
+  if (!search) return line;
+  // Split search into words, escape regex
+  const terms = search.split(/\s+/).filter(Boolean).map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (terms.length === 0) return line;
+  const regex = new RegExp(`(${terms.join('|')})`, 'gi');
+  return line.replace(regex, '<mark style="background: #ffe066; color: #222;">$1</mark>');
+}
         
         {/* View Mode Controls */}
         <div className="view-mode-controls" style={{ marginBottom: 20, padding: 12, backgroundColor: '#f8f9fa', borderRadius: 8, border: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
