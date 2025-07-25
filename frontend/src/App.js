@@ -352,12 +352,6 @@ function highlightTerms(line, search) {
   const regex = new RegExp(`(${terms.join('|')})`, 'gi');
   return line.replace(regex, '<mark style="background: #ffe066; color: #222;">$1</mark>');
 }
-        
-        {/* View Mode Controls */}
-        <div className="view-mode-controls" style={{ marginBottom: 20, padding: 12, backgroundColor: '#f8f9fa', borderRadius: 8, border: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <label style={{ marginRight: 20, fontWeight: 600, color: '#333' }}>View Mode:</label>
-            <button 
               className={viewMode === 'single' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => handleViewModeChange('single')}
               style={{ marginRight: 10 }}
