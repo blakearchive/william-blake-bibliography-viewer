@@ -10,6 +10,11 @@ from whoosh.index import create_in, open_dir
 from whoosh.fields import Schema, TEXT, NUMERIC
 from whoosh.qparser import QueryParser
 from functools import lru_cache
+from threading import Lock
+
+# Simple in-memory cache for first 5 pages
+_first_pages_cache = {}
+_first_pages_lock = Lock()
 from io import BytesIO
 from rapidfuzz import fuzz, process
 
@@ -42,11 +47,19 @@ except Exception as e:
 
 @lru_cache(maxsize=128)
 def get_page_image(page_num: int):
+    # Cache first 5 pages in memory
+    if 1 <= page_num <= 5:
+        with _first_pages_lock:
+            if page_num in _first_pages_cache:
+                return BytesIO(_first_pages_cache[page_num])
     doc = fitz.open(PDF_PATH)
     page = doc.load_page(page_num - 1)
     img = page.get_pixmap()
-    img_bytes = BytesIO(img.tobytes("png"))
-    return img_bytes
+    img_bytes = img.tobytes("png")
+    if 1 <= page_num <= 5:
+        with _first_pages_lock:
+            _first_pages_cache[page_num] = img_bytes
+    return BytesIO(img_bytes)
 
 @lru_cache(maxsize=128)
 def get_page_text_blocks(page_num: int):
