@@ -441,8 +441,13 @@ function App() {
 // Highlight search terms in a line (case-insensitive)
 function highlightTerms(line, search) {
   if (!search) return line;
+  // Remove surrounding quotes if present
+  let cleanSearch = search.trim();
+  if ((cleanSearch.startsWith('"') && cleanSearch.endsWith('"')) || (cleanSearch.startsWith("'") && cleanSearch.endsWith("'"))) {
+    cleanSearch = cleanSearch.slice(1, -1);
+  }
   // Split search into words, escape regex
-  const terms = search.split(/\s+/).filter(Boolean).map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const terms = cleanSearch.split(/\s+/).filter(Boolean).map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   if (terms.length === 0) return line;
   const regex = new RegExp(`(${terms.join('|')})`, 'gi');
   return line.replace(regex, '<mark style="background: #ffe066; color: #222;">$1</mark>');
