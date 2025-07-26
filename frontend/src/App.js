@@ -1,16 +1,33 @@
 import React, { useState, useEffect } from 'react';
 
-function CollapsibleSection({ title, children, defaultOpen = true }) {
+function CollapsibleSection({ title, children, defaultOpen = true, onTitleClick }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div style={{ marginBottom: 24 }}>
       <div
         className="bookmark-title"
-        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-        onClick={() => setOpen(!open)}
+        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
       >
-        <span>{open ? '▼' : '▶'}</span>
-        {title}
+        <span
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => setOpen(!open)}
+        >
+          {open ? '▼' : '▶'}
+        </span>
+        {onTitleClick ? (
+          <span
+            className="anchor-link"
+            style={{ cursor: 'pointer', flex: 1 }}
+            onClick={e => {
+              e.stopPropagation();
+              onTitleClick();
+            }}
+          >
+            {title}
+          </span>
+        ) : (
+          <span style={{ flex: 1 }}>{title}</span>
+        )}
       </div>
       {open && <div style={{ marginLeft: 12 }}>{children}</div>}
     </div>
@@ -54,7 +71,11 @@ function BookmarkTree({ bookmarks, onJump }) {
       {bookmarks.map((bm, idx) => (
         <li key={idx}>
           {bm.children && bm.children.length > 0 ? (
-            <CollapsibleSection title={cleanBookmarkTitle(bm.title)} defaultOpen={false}>
+            <CollapsibleSection
+              title={cleanBookmarkTitle(bm.title)}
+              defaultOpen={false}
+              onTitleClick={bm.page ? () => onJump(bm.page) : undefined}
+            >
               <BookmarkTree bookmarks={bm.children} onJump={onJump} />
             </CollapsibleSection>
           ) : (
@@ -256,7 +277,12 @@ function App() {
           const superscriptPattern = /^\d+[a-zA-Z]*f{1,2}$|^\d+[a-zA-Z]$|^\d+$/;
           return !removeTitles.includes(bm.title) && !superscriptPattern.test(bm.title.trim());
         }).map((bm, idx, arr) => (
-          <CollapsibleSection key={bm.title} title={cleanBookmarkTitle(bm.title)} defaultOpen={false}>
+          <CollapsibleSection
+            key={bm.title}
+            title={cleanBookmarkTitle(bm.title)}
+            defaultOpen={false}
+            onTitleClick={bm.page ? () => handleJump(bm.page) : undefined}
+          >
             {bm.children && bm.children.length > 0 ? (
               <BookmarkTree bookmarks={bm.children} onJump={handleJump} />
             ) : (
@@ -323,7 +349,8 @@ function App() {
                   <span className="anchor-link" onClick={() => handleJump(r.page)} style={{ fontWeight: 600, color: '#1976d2' }}>
                     Page {r.page}
                   </span>
-                  {r.lines && r.lines.length > 0 && (
+                  {/* Always show highlighted lines if present, otherwise highlight content */}
+                  {r.lines && r.lines.length > 0 ? (
                     <div style={{ marginTop: 4 }}>
                       {r.lines.map((line, i) => (
                         <div key={i} style={{ color: '#333', fontStyle: 'italic', marginBottom: 2 }}>
@@ -331,10 +358,9 @@ function App() {
                         </div>
                       ))}
                     </div>
-                  )}
-                  {r.content && (
-                    <div style={{ marginTop: 2, color: '#666', fontSize: '0.95em' }}>
-                      <span dangerouslySetInnerHTML={{ __html: r.content }} />
+                  ) : r.content && (
+                    <div style={{ marginTop: 4, color: '#333', fontStyle: 'italic', marginBottom: 2 }}>
+                      <span dangerouslySetInnerHTML={{ __html: highlightTerms(r.content, search) }} />
                     </div>
                   )}
                 </div>
@@ -448,18 +474,46 @@ function App() {
 }
 
 // Highlight search terms in a line (case-insensitive)
+
+
 function highlightTerms(line, search) {
   if (!search) return line;
-  // Remove surrounding quotes if present
   let cleanSearch = search.trim();
-  if ((cleanSearch.startsWith('"') && cleanSearch.endsWith('"')) || (cleanSearch.startsWith("'") && cleanSearch.endsWith("'"))) {
+  const isQuoted =
+    (cleanSearch.startsWith('"') && cleanSearch.endsWith('"')) ||
+    (cleanSearch.startsWith("'") && cleanSearch.endsWith("'"));
+  if (isQuoted) {
     cleanSearch = cleanSearch.slice(1, -1);
   }
-  // Split search into words, escape regex
-  const terms = cleanSearch.split(/\s+/).filter(Boolean).map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  if (terms.length === 0) return line;
-  const regex = new RegExp(`(${terms.join('|')})`, 'gi');
-  return line.replace(regex, '<mark style="background: #ffe066; color: #222;">$1</mark>');
+  if (!cleanSearch) return line;
+
+  if (isQuoted) {
+    // Phrase search: highlight the phrase even if split by whitespace/punct
+    const words = cleanSearch.split(/\s+/).filter(Boolean);
+    if (words.length > 1) {
+      // Build a regex that matches the words in order, separated by any whitespace or punctuation (Unicode-aware)
+      let phrasePattern;
+      let regexPhrase;
+      try {
+        phrasePattern = words.map(w => w.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')).join('[\\s\\p{P}]+');
+        regexPhrase = new RegExp(`(${phrasePattern})`, 'giu');
+      } catch (e) {
+        phrasePattern = words.map(w => w.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')).join('[\\s\\W]+');
+        regexPhrase = new RegExp(`(${phrasePattern})`, 'gi');
+      }
+      return line.replace(regexPhrase, '<mark style="background: #ffe066; color: #222;">$1</mark>');
+    } else {
+      // Single word phrase
+      const regex = new RegExp(`(${cleanSearch.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')})`, 'gi');
+      return line.replace(regex, '<mark style="background: #ffe066; color: #222;">$1</mark>');
+    }
+  } else {
+    // Highlight each word
+    const terms = cleanSearch.split(/\s+/).filter(Boolean).map(term => term.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'));
+    if (terms.length === 0) return line;
+    const regex = new RegExp(`(${terms.join('|')})`, 'gi');
+    return line.replace(regex, '<mark style="background: #ffe066; color: #222;">$1</mark>');
+  }
 }
 
 export default App;

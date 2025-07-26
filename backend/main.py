@@ -165,11 +165,35 @@ def search_pdf(query, fuzzy=False):
         with ix.searcher() as searcher:
             results = searcher.search(q, limit=None)
             output = []
+            is_quoted = (
+                (query.startswith('"') and query.endswith('"')) or
+                (query.startswith("'") and query.endswith("'"))
+            )
+            clean_query = query[1:-1] if is_quoted else query
+            # For phrase search, build regex to match phrase across whitespace/punct
+            import re
+            def phrase_regex(phrase):
+                words = phrase.strip().split()
+                if len(words) > 1:
+                    # Match words in order, allowing whitespace/punct between
+                    pattern = r"[\\s\\p{P}]+".join([re.escape(w) for w in words])
+                    try:
+                        return re.compile(pattern, re.IGNORECASE | re.UNICODE)
+                    except Exception:
+                        # Fallback if \p{P} unsupported
+                        pattern = r"[\\s\\W]+".join([re.escape(w) for w in words])
+                        return re.compile(pattern, re.IGNORECASE)
+                else:
+                    return re.compile(re.escape(phrase), re.IGNORECASE)
+
             for result in results:
                 content = result["content"]
                 lines = content.splitlines()
-                # Find all lines containing the query (case-insensitive)
-                matching_lines = [line for line in lines if query.lower() in line.lower()]
+                if is_quoted:
+                    regex = phrase_regex(clean_query)
+                    matching_lines = [line for line in lines if regex.search(line)]
+                else:
+                    matching_lines = [line for line in lines if clean_query.lower() in line.lower()]
                 output.append({
                     "page": result["page"],
                     "content": content[:200] + "...",
