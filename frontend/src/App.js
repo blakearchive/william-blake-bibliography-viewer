@@ -40,6 +40,13 @@ function PrefatoryMaterialTree({ onJump }) {
   );
 }
 // Restore BookmarkTree component
+// Helper to clean unwanted trailing number/letter patterns (e.g., 32F, 35FF, 39f, 12a, 123)
+function cleanBookmarkTitle(title) {
+  // Remove patterns like: number, number+letter, number+f/ff (case-insensitive) if followed by space, parenthesis, punctuation, or end of string
+  // Examples: 'IV. Biographies39F (Including ...' => 'IV. Biographies (Including ...'
+  return title.replace(/([ \t]*[0-9]+[a-zA-Z]{0,2})(?=\s|\(|\)|:|;|,|\.|$)/gi, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 function BookmarkTree({ bookmarks, onJump }) {
   if (!bookmarks || bookmarks.length === 0) return null;
   return (
@@ -47,11 +54,11 @@ function BookmarkTree({ bookmarks, onJump }) {
       {bookmarks.map((bm, idx) => (
         <li key={idx}>
           {bm.children && bm.children.length > 0 ? (
-            <CollapsibleSection title={bm.title} defaultOpen={false}>
+            <CollapsibleSection title={cleanBookmarkTitle(bm.title)} defaultOpen={false}>
               <BookmarkTree bookmarks={bm.children} onJump={onJump} />
             </CollapsibleSection>
           ) : (
-            <span className="bookmark-title anchor-link" onClick={() => onJump(bm.page)}>{bm.title}</span>
+            <span className="bookmark-title anchor-link" onClick={() => onJump(bm.page)}>{cleanBookmarkTitle(bm.title)}</span>
           )}
         </li>
       ))}
@@ -249,11 +256,11 @@ function App() {
           const superscriptPattern = /^\d+[a-zA-Z]*f{1,2}$|^\d+[a-zA-Z]$|^\d+$/;
           return !removeTitles.includes(bm.title) && !superscriptPattern.test(bm.title.trim());
         }).map((bm, idx, arr) => (
-          <CollapsibleSection key={bm.title} title={bm.title} defaultOpen={false}>
+          <CollapsibleSection key={bm.title} title={cleanBookmarkTitle(bm.title)} defaultOpen={false}>
             {bm.children && bm.children.length > 0 ? (
               <BookmarkTree bookmarks={bm.children} onJump={handleJump} />
             ) : (
-              <span className="bookmark-title anchor-link" onClick={() => handleJump(bm.page)}>{bm.title}</span>
+              <span className="bookmark-title anchor-link" onClick={() => handleJump(bm.page)}>{cleanBookmarkTitle(bm.title)}</span>
             )}
           </CollapsibleSection>
         ))}
