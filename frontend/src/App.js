@@ -245,7 +245,9 @@ function App() {
             "Different Blake Journals",
             "Document Bookmarks"
           ];
-          return !removeTitles.includes(bm.title);
+          // Remove bookmarks with titles that are just numbers, or end with f, ff, or are short number+letter combos (e.g., 35f, 39ff, 12a)
+          const superscriptPattern = /^\d+[a-zA-Z]*f{1,2}$|^\d+[a-zA-Z]$|^\d+$/;
+          return !removeTitles.includes(bm.title) && !superscriptPattern.test(bm.title.trim());
         }).map((bm, idx, arr) => (
           <CollapsibleSection key={bm.title} title={bm.title} defaultOpen={false}>
             {bm.children && bm.children.length > 0 ? (
