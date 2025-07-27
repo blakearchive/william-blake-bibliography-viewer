@@ -102,7 +102,13 @@ function App() {
   const [searchTotalPages, setSearchTotalPages] = useState(1);
   const [searchTotalResults, setSearchTotalResults] = useState(0);
   const [bookmarks, setBookmarks] = useState([]);
-  const [pageNum, setPageNum] = useState(1);
+  // Read ?page=... from URL on load
+  function getInitialPageNum() {
+    const params = new URLSearchParams(window.location.search);
+    const p = parseInt(params.get('page'), 10);
+    return (p && !isNaN(p) && p > 0) ? p : 1;
+  }
+  const [pageNum, setPageNum] = useState(getInitialPageNum());
   const [pageImg, setPageImg] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -388,6 +394,12 @@ function App() {
                       border: '2px solid #1976d2', 
                       background: '#fff' 
                     }}
+                    onNavigate={target => {
+                      if (typeof target === 'number') {
+                        // Open a new tab with the page number as a query param
+                        window.open(`?page=${target}`, '_blank');
+                      }
+                    }}
                   />
                 )
               )}
@@ -446,6 +458,11 @@ function App() {
                                 boxShadow: '0 4px 24px #e0e0e0', 
                                 border: '2px solid #1976d2', 
                                 background: '#fff' 
+                              }}
+                              onNavigate={target => {
+                                if (typeof target === 'number') {
+                                  window.open(`?page=${target}`, '_blank');
+                                }
                               }}
                             />
                           ) : (
