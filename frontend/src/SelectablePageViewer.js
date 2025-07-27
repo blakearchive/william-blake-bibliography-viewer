@@ -1,7 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import PdfLinkOverlay from './PdfLinkOverlay';
 
-const SelectablePageViewer = ({ pageNum, imageUrl, style }) => {
+// Accept onNavigate prop for internal PDF navigation
+const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
+  // Handler for internal navigation (page or anchor)
+  const handleNavigate = (target) => {
+    if (typeof target === 'number') {
+      // Go to page number
+      if (onNavigate) onNavigate(target);
+    } else if (typeof target === 'string') {
+      // Go to anchor (dest)
+      if (onNavigate) onNavigate(target);
+    }
+  };
   const [textBlocks, setTextBlocks] = useState(null);
   const [loading, setLoading] = useState(false);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -30,7 +42,6 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style }) => {
 
   const handleImageLoad = () => {
     if (imageRef.current) {
-      const rect = imageRef.current.getBoundingClientRect();
       setImageSize({
         width: imageRef.current.offsetWidth,
         height: imageRef.current.offsetHeight
@@ -110,7 +121,19 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style }) => {
         }}
         draggable={false}
       />
-      
+
+      {/* PDF Link Overlay */}
+      {textBlocks && imageSize.width > 0 && (
+        <PdfLinkOverlay
+          pageNum={pageNum}
+          pdfWidth={textBlocks.width}
+          pdfHeight={textBlocks.height}
+          renderedWidth={imageSize.width}
+          renderedHeight={imageSize.height}
+          onNavigate={handleNavigate}
+        />
+      )}
+
       {/* Selectable Text Overlay */}
       {textBlocks && imageSize.width > 0 && (
         <div 
@@ -133,7 +156,7 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style }) => {
           )}
         </div>
       )}
-      
+
       {/* Loading indicator for text */}
       {loading && (
         <div 
@@ -152,7 +175,7 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style }) => {
           📄 Loading text...
         </div>
       )}
-      
+
       {/* Text ready indicator */}
       {textBlocks && !loading && (
         <div 

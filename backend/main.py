@@ -240,6 +240,54 @@ def get_pdf_info():
         print(f"Error getting PDF info: {e}")
         return JSONResponse({"error": "Failed to get PDF information"}, status_code=500)
 
+
+# New endpoint to extract link annotations for a page
+@app.get("/api/page/{page_num}/links")
+def get_page_links(page_num: int):
+    """Get clickable link annotations (rectangles and URLs) for a specific page"""
+    try:
+        doc = get_pdf()
+        if page_num < 1 or page_num > doc.page_count:
+            return JSONResponse({"error": "Page out of range"}, status_code=404)
+        page = doc.load_page(page_num - 1)
+        links = page.get_links()
+        def to_jsonable(val):
+            # Recursively convert PyMuPDF types to JSON-serializable
+            import fitz
+            if isinstance(val, (int, float, str, type(None))):
+                return val
+            elif isinstance(val, (list, tuple)):
+                return [to_jsonable(x) for x in val]
+            elif isinstance(val, dict):
+                return {k: to_jsonable(v) for k, v in val.items()}
+            elif isinstance(val, fitz.Rect) or (hasattr(val, '__iter__') and len(val) == 4):
+                return [float(x) for x in val]
+            elif hasattr(val, 'x') and hasattr(val, 'y'):
+                # fitz.Point or similar
+                return [float(val.x), float(val.y)]
+            else:
+                return str(val)
+
+        link_list = []
+        for link in links:
+            rect = link.get("from")
+            if rect is not None:
+                rect = to_jsonable(rect)
+            # Only include if rect is a list of 4 numbers
+            if isinstance(rect, list) and len(rect) == 4 and all(isinstance(x, (int, float)) for x in rect):
+                # Include all available link info, converting all values to JSON-serializable
+                link_info = {"rect": rect}
+                for key, value in link.items():
+                    if key != "from":
+                        link_info[key] = to_jsonable(value)
+                link_list.append(link_info)
+            else:
+                print(f"Skipping invalid link annotation on page {page_num}: {link}")
+        return JSONResponse({"links": link_list})
+    except Exception as e:
+        print(f"Error extracting links for page {page_num}: {e}")
+        return JSONResponse({"error": f"Failed to extract links for page {page_num}"}, status_code=500)
+
 @app.get("/api/page/{page_num}/text")
 def get_page_text(page_num: int):
     """Get text blocks with coordinates for a specific page"""

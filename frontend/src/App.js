@@ -476,6 +476,7 @@ function App() {
 // Highlight search terms in a line (case-insensitive)
 
 
+
 function highlightTerms(line, search) {
   if (!search) return line;
   let cleanSearch = search.trim();
@@ -487,33 +488,65 @@ function highlightTerms(line, search) {
   }
   if (!cleanSearch) return line;
 
+  // Helper: highlight text in a DOM node tree, preserving tags
+  function highlightInNode(node, regex) {
+    if (node.nodeType === 3) { // Text node
+      const parts = node.data.split(regex);
+      if (parts.length === 1) return node.data;
+      let result = [];
+      let match;
+      let lastIndex = 0;
+      regex.lastIndex = 0;
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i]) result.push(parts[i]);
+        if (i < parts.length - 1) {
+          match = regex.exec(node.data.slice(lastIndex));
+          if (match) {
+            result.push(`<mark style="background: #ffe066; color: #222;">${match[0]}</mark>`);
+            lastIndex += match.index + match[0].length;
+          }
+        }
+      }
+      return result.join('');
+    } else if (node.nodeType === 1) { // Element node
+      let html = '';
+      for (let child of node.childNodes) {
+        html += highlightInNode(child, regex);
+      }
+      return node.tagName === 'A'
+        ? `<a href="${node.getAttribute('href')}"${node.getAttribute('target') ? ` target="${node.getAttribute('target')}"` : ''}>${html}</a>`
+        : `<${node.tagName.toLowerCase()}${[...node.attributes].map(a => ` ${a.name}="${a.value}"`).join('')}>${html}</${node.tagName.toLowerCase()}>`;
+    }
+    return '';
+  }
+
+  // Build regex for phrase or word highlighting
+  let regex;
   if (isQuoted) {
-    // Phrase search: highlight the phrase even if split by whitespace/punct
     const words = cleanSearch.split(/\s+/).filter(Boolean);
     if (words.length > 1) {
-      // Build a regex that matches the words in order, separated by any whitespace or punctuation (Unicode-aware)
       let phrasePattern;
-      let regexPhrase;
       try {
         phrasePattern = words.map(w => w.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')).join('[\\s\\p{P}]+');
-        regexPhrase = new RegExp(`(${phrasePattern})`, 'giu');
+        regex = new RegExp(phrasePattern, 'giu');
       } catch (e) {
         phrasePattern = words.map(w => w.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')).join('[\\s\\W]+');
-        regexPhrase = new RegExp(`(${phrasePattern})`, 'gi');
+        regex = new RegExp(phrasePattern, 'gi');
       }
-      return line.replace(regexPhrase, '<mark style="background: #ffe066; color: #222;">$1</mark>');
     } else {
-      // Single word phrase
-      const regex = new RegExp(`(${cleanSearch.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')})`, 'gi');
-      return line.replace(regex, '<mark style="background: #ffe066; color: #222;">$1</mark>');
+      regex = new RegExp(cleanSearch.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'), 'gi');
     }
   } else {
-    // Highlight each word
     const terms = cleanSearch.split(/\s+/).filter(Boolean).map(term => term.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'));
     if (terms.length === 0) return line;
-    const regex = new RegExp(`(${terms.join('|')})`, 'gi');
-    return line.replace(regex, '<mark style="background: #ffe066; color: #222;">$1</mark>');
+    regex = new RegExp(terms.join('|'), 'gi');
   }
+
+  // Parse HTML and walk DOM
+  const parser = new window.DOMParser();
+  const doc = parser.parseFromString(`<div>${line}</div>`, 'text/html');
+  const root = doc.body.firstChild;
+  return highlightInNode(root, regex);
 }
 
 export default App;
