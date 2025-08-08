@@ -59,9 +59,9 @@ function PrefatoryMaterialTree({ onJump }) {
 // Restore BookmarkTree component
 // Helper to clean unwanted trailing number/letter patterns (e.g., 32F, 35FF, 39f, 12a, 123)
 function cleanBookmarkTitle(title) {
-  // Remove patterns like: number, number+letter, number+f/ff (case-insensitive) if followed by space, parenthesis, punctuation, or end of string
+  // Only remove trailing page codes (e.g., '39F', '35FF', '12a') at the end of the title, not numbers in parentheses or text
   // Examples: 'IV. Biographies39F (Including ...' => 'IV. Biographies (Including ...'
-  return title.replace(/([ \t]*[0-9]+[a-zA-Z]{0,2})(?=\s|\(|\)|:|;|,|\.|$)/gi, '').replace(/\s{2,}/g, ' ').trim();
+  return title.replace(/(\d+[a-zA-Z]{0,2})$/, '').replace(/\s{2,}/g, ' ').trim();
 }
 
 function BookmarkTree({ bookmarks, onJump }) {

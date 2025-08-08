@@ -18,7 +18,7 @@ _first_pages_lock = Lock()
 from io import BytesIO
 from rapidfuzz import fuzz, process
 
-PDF_PATH = os.path.join(os.path.dirname(__file__), "Bibliography Final Draft.pdf")
+PDF_PATH = os.path.join(os.path.dirname(__file__), "Bibliography Revised 8.6.25.pdf")
 # Use /tmp for index directory in containerized environments
 INDEX_DIR = os.getenv('SEARCH_INDEX_DIR', '/tmp/indexdir')
 
@@ -275,11 +275,14 @@ def get_page_links(page_num: int):
                 rect = to_jsonable(rect)
             # Only include if rect is a list of 4 numbers
             if isinstance(rect, list) and len(rect) == 4 and all(isinstance(x, (int, float)) for x in rect):
-                # Include all available link info, converting all values to JSON-serializable
                 link_info = {"rect": rect}
                 for key, value in link.items():
                     if key != "from":
-                        link_info[key] = to_jsonable(value)
+                        # If this is an internal link (points to a page), adjust the page offset
+                        if key == "page" and isinstance(value, int):
+                            link_info[key] = value - 1 if value > 1 else 1
+                        else:
+                            link_info[key] = to_jsonable(value)
                 link_list.append(link_info)
             else:
                 print(f"Skipping invalid link annotation on page {page_num}: {link}")
