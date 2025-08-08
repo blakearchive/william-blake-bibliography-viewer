@@ -261,6 +261,12 @@ function App() {
   return (
     <div className="app-container">
       <aside className="sidebar">
+        <button
+          style={{ margin: '12px 0', padding: '8px 16px', borderRadius: 6, background: '#1976d2', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+          onClick={() => handleJump(1)}
+        >
+          Return to Title Page
+        </button>
         <PrefatoryMaterialTree onJump={handleJump} />
         {bookmarks.filter(bm => {
           const removeTitles = [
