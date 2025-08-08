@@ -5,9 +5,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY PDF_SETUP.md .
+COPY Bibliography_Revised_8.6.25.pdf .
 ARG GITHUB_TOKEN
-RUN echo "Downloading PDF from GitHub release..." && \
-    (if [ ! -z "$GITHUB_TOKEN" ]; then \
+# If the PDF is missing or too small, download from GitHub
+RUN if [ ! -f "Bibliography_Revised_8.6.25.pdf" ] || [ $(stat -c%s "Bibliography_Revised_8.6.25.pdf" 2>/dev/null || stat -f%z "Bibliography_Revised_8.6.25.pdf" 2>/dev/null) -lt 1000000 ]; then \
+    echo "Downloading PDF from GitHub release..."; \
+    if [ ! -z "$GITHUB_TOKEN" ]; then \
         echo "Using GitHub token for private repository..."; \
         curl -L -H "Authorization: token $GITHUB_TOKEN" -o "Bibliography_Revised_8.6.25.pdf" \
         "https://github.com/blakearchive/william-blake-bibliography-viewer/releases/download/v1.0.0/Bibliography_Revised_8.6.25.pdf"; \
@@ -15,9 +18,9 @@ RUN echo "Downloading PDF from GitHub release..." && \
         echo "Trying without authentication..."; \
         curl -L -o "Bibliography_Revised_8.6.25.pdf" \
         "https://github.com/blakearchive/william-blake-bibliography-viewer/releases/download/v1.0.0/Bibliography_Revised_8.6.25.pdf"; \
-    fi) \
-    && echo "PDF download completed: $(ls -lh 'Bibliography_Revised_8.6.25.pdf' 2>/dev/null || echo 'file not found')" \
-    || (echo "PDF download failed, creating placeholder..." && echo "PDF download failed - will try at runtime" > "Bibliography_Revised_8.6.25.pdf")
+    fi; \
+    echo "PDF download completed: $(ls -lh 'Bibliography_Revised_8.6.25.pdf' 2>/dev/null || echo 'file not found')"; \
+fi
 RUN if [ -f "Bibliography_Revised_8.6.25.pdf" ]; then \
         FILE_SIZE=$(stat -c%s "Bibliography_Revised_8.6.25.pdf" 2>/dev/null || stat -f%z "Bibliography_Revised_8.6.25.pdf" 2>/dev/null); \
         if [ "$FILE_SIZE" -gt 1000000 ]; then \
