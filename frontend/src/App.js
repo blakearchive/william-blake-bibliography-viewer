@@ -97,6 +97,7 @@ import SelectablePageViewer from './SelectablePageViewer';
 function App() {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState([]);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [searchPage, setSearchPage] = useState(1);
   const [searchPageSize, setSearchPageSize] = useState(50);
   const [searchTotalPages, setSearchTotalPages] = useState(1);
@@ -165,7 +166,8 @@ function App() {
   };
 
   const handleSearch = async () => {
-    fetchSearchResults(1, searchPageSize);
+    await fetchSearchResults(1, searchPageSize);
+    setSearchModalOpen(true);
   };
 
   const handleSearchPageChange = (newPage) => {
@@ -247,28 +249,74 @@ function App() {
   };
 
   const handleJump = (page) => {
-    if (viewMode === 'single') {
-      setPageNum(page);
-    } else {
-      const pageElement = document.getElementById(`page-${page}`);
-      if (pageElement) {
-        pageElement.scrollIntoView({ behavior: 'smooth' });
-      }
-    }
-    setResults([]);
+    // Fix offset: add 3 to all page jumps
+    const correctedPage = page + 3;
+    window.open(`?page=${correctedPage}`, '_blank');
   };
 
   return (
     <div className="app-container">
+      {/* Search Results Modal */}
+      {searchModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 8px 32px #2222', padding: 32, minWidth: 600, maxHeight: '80vh', overflowY: 'auto', position: 'relative' }}>
+            <button style={{ position: 'absolute', top: 16, right: 16, fontSize: 18, background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setSearchModalOpen(false)}>&times;</button>
+            <h3 style={{ color: '#7c6f57', marginBottom: 12, fontSize: '1.1em' }}>Search Results</h3>
+            <div style={{ marginBottom: 8, color: '#444', fontSize: '0.98em', background: '#fffbe6', padding: 8, borderRadius: 6 }}>
+              <strong>How search works:</strong> Each result shows all lines on the page that contain your search terms. If a page matches, you may need to visually scan the page for context. Search terms are highlighted below.
+            </div>
+            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 16 }}>
+              <span style={{ fontSize: '0.95em', color: '#666' }}>
+                Showing {results.length} of {searchTotalResults} result{searchTotalResults !== 1 ? 's' : ''}
+              </span>
+              <span style={{ fontSize: '0.95em', color: '#666' }}>
+                Page {searchPage} of {searchTotalPages}
+              </span>
+              <button onClick={() => handleSearchPageChange(searchPage - 1)} disabled={searchPage <= 1} style={{ padding: '4px 10px', borderRadius: 4 }}>Prev</button>
+              <button onClick={() => handleSearchPageChange(searchPage + 1)} disabled={searchPage >= searchTotalPages} style={{ padding: '4px 10px', borderRadius: 4 }}>Next</button>
+              <label style={{ marginLeft: 8 }}>Page Size:</label>
+              <select value={searchPageSize} onChange={handleSearchPageSizeChange} style={{ padding: '2px 8px', borderRadius: 4 }}>
+                {[25, 50, 100, 200, 500].map(size => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ maxHeight: 400, minWidth: 500, overflowY: 'auto' }}>
+              {results.map((r, idx) => (
+                <div key={idx} className="search-result" style={{ marginBottom: 8, padding: 8, backgroundColor: '#fff', borderRadius: 4 }}>
+                  <span className="anchor-link" onClick={() => handleJump(r.page)} style={{ fontWeight: 600, color: '#1976d2', cursor: 'pointer' }}>
+                    Page {r.page}
+                  </span>
+                  {/* Always show highlighted lines if present, otherwise highlight content */}
+                  {r.lines && r.lines.length > 0 ? (
+                    <div style={{ marginTop: 4 }}>
+                      {r.lines.map((line, i) => (
+                        <div key={i} style={{ color: '#333', fontStyle: 'italic', marginBottom: 2 }}>
+                          <span dangerouslySetInnerHTML={{ __html: highlightTerms(line, search) }} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : r.content && (
+                    <div style={{ marginTop: 4, color: '#333', fontStyle: 'italic', marginBottom: 2 }}>
+                      <span dangerouslySetInnerHTML={{ __html: highlightTerms(r.content, search) }} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ...existing sidebar and main viewer code... */}
       <aside className="sidebar">
         <button
           style={{ margin: '12px 0', padding: '8px 16px', borderRadius: 6, background: '#1976d2', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600 }}
           onClick={() => handleJump(1)}
         >
-          Return to Title Page
+          Return to Title Page/Home
         </button>
         <PrefatoryMaterialTree onJump={handleJump} />
-        {bookmarks.filter(bm => {
+        {(() => {
           const removeTitles = [
             "Contents0F",
             "Citations, Annotations, and Links 19",
@@ -285,25 +333,49 @@ function App() {
             "Different Blake Journals",
             "Document Bookmarks"
           ];
-          // Remove bookmarks with titles that are just numbers, or end with f, ff, or are short number+letter combos (e.g., 35f, 39ff, 12a)
           const superscriptPattern = /^\d+[a-zA-Z]*f{1,2}$|^\d+[a-zA-Z]$|^\d+$/;
-          return !removeTitles.includes(bm.title) && !superscriptPattern.test(bm.title.trim());
-        }).map((bm, idx, arr) => (
-          <CollapsibleSection
-            key={bm.title}
-            title={cleanBookmarkTitle(bm.title)}
-            defaultOpen={false}
-            onTitleClick={bm.page ? () => handleJump(bm.page) : undefined}
-          >
-            {bm.children && bm.children.length > 0 ? (
-              <BookmarkTree bookmarks={bm.children} onJump={handleJump} />
-            ) : (
-              <span className="bookmark-title anchor-link" onClick={() => handleJump(bm.page)}>{cleanBookmarkTitle(bm.title)}</span>
-            )}
-          </CollapsibleSection>
-        ))}
+          const filtered = bookmarks.filter(bm => !removeTitles.includes(bm.title) && !superscriptPattern.test(bm.title.trim()));
+          return filtered.map((bm, idx, arr) => {
+            // Insert a blank line between Appendix B and Appendix C
+            if (
+              cleanBookmarkTitle(bm.title).toLowerCase().startsWith('appendix c') &&
+              idx > 0 && cleanBookmarkTitle(arr[idx - 1].title).toLowerCase().startsWith('appendix b')
+            ) {
+              return [
+                <div key={bm.title + '-spacer'} style={{ height: 16 }} />,
+                <CollapsibleSection
+                  key={bm.title}
+                  title={cleanBookmarkTitle(bm.title)}
+                  defaultOpen={false}
+                  onTitleClick={bm.page ? () => handleJump(bm.page) : undefined}
+                >
+                  {bm.children && bm.children.length > 0 ? (
+                    <BookmarkTree bookmarks={bm.children} onJump={handleJump} />
+                  ) : (
+                    <span className="bookmark-title anchor-link" onClick={() => handleJump(bm.page)}>{cleanBookmarkTitle(bm.title)}</span>
+                  )}
+                </CollapsibleSection>
+              ];
+            }
+            return (
+              <CollapsibleSection
+                key={bm.title}
+                title={cleanBookmarkTitle(bm.title)}
+                defaultOpen={false}
+                onTitleClick={bm.page ? () => handleJump(bm.page) : undefined}
+              >
+                {bm.children && bm.children.length > 0 ? (
+                  <BookmarkTree bookmarks={bm.children} onJump={handleJump} />
+                ) : (
+                  <span className="bookmark-title anchor-link" onClick={() => handleJump(bm.page)}>{cleanBookmarkTitle(bm.title)}</span>
+                )}
+              </CollapsibleSection>
+            );
+          });
+        })()}
       </aside>
       <main className="viewer">
+        {/* ...existing header, search bar, and viewer code... */}
         <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <div>
@@ -332,54 +404,6 @@ function App() {
             )}
           </div>
         </div>
-        {/* Search Results - Now in a collapsible section with pagination and explanation */}
-        {results.length > 0 && (
-          <div style={{ marginBottom: 20, padding: 12, backgroundColor: '#f8f9fa', borderRadius: 8, border: '1px solid #e0e0e0' }}>
-            <h3 style={{ color: '#7c6f57', marginBottom: 12, fontSize: '1.1em' }}>Search Results</h3>
-            <div style={{ marginBottom: 8, color: '#444', fontSize: '0.98em', background: '#fffbe6', padding: 8, borderRadius: 6 }}>
-              <strong>How search works:</strong> Each result shows all lines on the page that contain your search terms. If a page matches, you may need to visually scan the page for context. Search terms are highlighted below.
-            </div>
-            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 16 }}>
-              <span style={{ fontSize: '0.95em', color: '#666' }}>
-                Showing {results.length} of {searchTotalResults} result{searchTotalResults !== 1 ? 's' : ''}
-              </span>
-              <span style={{ fontSize: '0.95em', color: '#666' }}>
-                Page {searchPage} of {searchTotalPages}
-              </span>
-              <button onClick={() => handleSearchPageChange(searchPage - 1)} disabled={searchPage <= 1} style={{ padding: '4px 10px', borderRadius: 4 }}>Prev</button>
-              <button onClick={() => handleSearchPageChange(searchPage + 1)} disabled={searchPage >= searchTotalPages} style={{ padding: '4px 10px', borderRadius: 4 }}>Next</button>
-              <label style={{ marginLeft: 8 }}>Page Size:</label>
-              <select value={searchPageSize} onChange={handleSearchPageSizeChange} style={{ padding: '2px 8px', borderRadius: 4 }}>
-                {[25, 50, 100, 200, 500].map(size => (
-                  <option key={size} value={size}>{size}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ maxHeight: 400, minWidth: 500, overflowY: 'auto' }}>
-              {results.map((r, idx) => (
-                <div key={idx} className="search-result" style={{ marginBottom: 8, padding: 8, backgroundColor: '#fff', borderRadius: 4 }}>
-                  <span className="anchor-link" onClick={() => handleJump(r.page)} style={{ fontWeight: 600, color: '#1976d2' }}>
-                    Page {r.page}
-                  </span>
-                  {/* Always show highlighted lines if present, otherwise highlight content */}
-                  {r.lines && r.lines.length > 0 ? (
-                    <div style={{ marginTop: 4 }}>
-                      {r.lines.map((line, i) => (
-                        <div key={i} style={{ color: '#333', fontStyle: 'italic', marginBottom: 2 }}>
-                          <span dangerouslySetInnerHTML={{ __html: highlightTerms(line, search) }} />
-                        </div>
-                      ))}
-                    </div>
-                  ) : r.content && (
-                    <div style={{ marginTop: 4, color: '#333', fontStyle: 'italic', marginBottom: 2 }}>
-                      <span dangerouslySetInnerHTML={{ __html: highlightTerms(r.content, search) }} />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         {/* Main Page Content Area */}
         <div className="page-content" style={{ flexGrow: 1 }}>
           {/* Single Page View */}
@@ -402,7 +426,6 @@ function App() {
                     }}
                     onNavigate={target => {
                       if (typeof target === 'number') {
-                        // Open a new tab with the page number as a query param
                         window.open(`?page=${target}`, '_blank');
                       }
                     }}
