@@ -54,7 +54,10 @@ def get_page_image(page_num: int):
                 return BytesIO(_first_pages_cache[page_num])
     doc = fitz.open(PDF_PATH)
     page = doc.load_page(page_num - 1)
-    img = page.get_pixmap()
+    # Use higher zoom for sharper images (e.g., 2.0x)
+    zoom = 2.0
+    mat = fitz.Matrix(zoom, zoom)
+    img = page.get_pixmap(matrix=mat)
     img_bytes = img.tobytes("png")
     if 1 <= page_num <= 5:
         with _first_pages_lock:
