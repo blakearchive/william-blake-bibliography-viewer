@@ -248,8 +248,13 @@ function App() {
     }
   };
 
+  // Sidebar/bookmark links: go to actual page
   const handleJump = (page) => {
-    // Fix offset: add 3 to all page jumps
+    window.open(`?page=${page}`, '_blank');
+  };
+
+  // Internal document links: add offset
+  const handleInternalLink = (page) => {
     const correctedPage = page + 3;
     window.open(`?page=${correctedPage}`, '_blank');
   };
@@ -426,7 +431,7 @@ function App() {
                     }}
                     onNavigate={target => {
                       if (typeof target === 'number') {
-                        window.open(`?page=${target}`, '_blank');
+                        handleInternalLink(target);
                       }
                     }}
                   />
