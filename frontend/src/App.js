@@ -39,7 +39,7 @@ function PrefatoryMaterialTree({ onJump }) {
     { title: "User Note", page: 5 },
     { title: "Abbreviations", page: 6 },
     { title: "Acknowledgements", page: 9 },
-    { title: "Introduction", page: 11, children: [ { title: "Organization", page: 12 } ] },
+    { title: "Introduction", page: 11, children: [ { title: "Organization", page: 11 } ] },
     { title: "Citations, Annotations, and Links", page: 18 },
     { title: "A Note on Specialized Terms for Researchers New to William Blake", page: 20 },
     { title: "Different Blake Journals", page: 22 }
