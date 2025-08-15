@@ -39,10 +39,10 @@ function PrefatoryMaterialTree({ onJump }) {
     { title: "User Note", page: 5 },
     { title: "Abbreviations", page: 6 },
     { title: "Acknowledgements", page: 9 },
-    { title: "Introduction", page: 12 },
-    { title: "Citations, Annotations, and Links", page: 19 },
-    { title: "A Note on Specialized Terms for Researchers New to William Blake", page: 21 },
-    { title: "Different Blake Journals", page: 23 }
+    { title: "Introduction", page: 11, children: [ { title: "Organization", page: 12 } ] },
+    { title: "Citations, Annotations, and Links", page: 18 },
+    { title: "A Note on Specialized Terms for Researchers New to William Blake", page: 20 },
+    { title: "Different Blake Journals", page: 22 }
   ];
   return (
     <CollapsibleSection title="Prefatory Material" defaultOpen={true}>
@@ -50,6 +50,15 @@ function PrefatoryMaterialTree({ onJump }) {
         {items.map((item, idx) => (
           <li key={idx} style={{ marginBottom: 6 }}>
             <span className="bookmark-title anchor-link" onClick={() => onJump(item.page)}>{item.title}</span>
+            {item.children && item.children.length > 0 && (
+              <ul style={{ listStyle: 'none', paddingLeft: 12, marginTop: 6 }}>
+                {item.children.map((child, cidx) => (
+                  <li key={`child-${idx}-${cidx}`} style={{ marginBottom: 4 }}>
+                    <span className="bookmark-title anchor-link" onClick={() => onJump(child.page)}>{child.title}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </li>
         ))}
       </ul>
@@ -64,6 +73,17 @@ function cleanBookmarkTitle(title) {
   return title.replace(/(\d+[a-zA-Z]{0,2})$/, '').replace(/\s{2,}/g, ' ').trim();
 }
 
+// Normalize titles for robust comparison: lowercase, normalize apostrophes, remove punctuation, collapse whitespace
+function normalizeTitle(title) {
+  if (!title) return '';
+  return title
+    .replace(/[’‘]/g, "'")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function BookmarkTree({ bookmarks, onJump }) {
   if (!bookmarks || bookmarks.length === 0) return null;
   return (
@@ -76,7 +96,19 @@ function BookmarkTree({ bookmarks, onJump }) {
               defaultOpen={false}
               onTitleClick={bm.page ? () => onJump(bm.page) : undefined}
             >
-              <BookmarkTree bookmarks={bm.children} onJump={onJump} />
+              {/* Robust filtering: remove children whose raw title equals parent raw title, or whose normalized cleaned title equals parent's normalized cleaned title */}
+              {(() => {
+                const parentRaw = (bm.title || '').trim();
+                const parentNorm = normalizeTitle(cleanBookmarkTitle(parentRaw));
+                const childrenFiltered = bm.children.filter(c => {
+                  const childRaw = (c.title || '').trim();
+                  const childNorm = normalizeTitle(cleanBookmarkTitle(childRaw));
+                  if (childRaw === parentRaw) return false; // exact raw match
+                  if (childNorm === parentNorm) return false; // normalized match
+                  return true;
+                });
+                return <BookmarkTree bookmarks={childrenFiltered} onJump={onJump} />;
+              })()}
             </CollapsibleSection>
           ) : (
             <span className="bookmark-title anchor-link" onClick={() => onJump(bm.page)}>{cleanBookmarkTitle(bm.title)}</span>
@@ -332,11 +364,12 @@ function App() {
             "Acknowledgments",
             "Preface",
             "Introduction",
-            "Organization",
             "Citations, Annotations, and Links",
             "A Note on Specialized Terms for Researchers New to William Blake",
             "Different Blake Journals",
-            "Document Bookmarks"
+            "Document Bookmarks",
+            // Remove this parent entry to eliminate the duplicate child
+            "A Selected Annotated Bibliography of William Blake and His Circle: A Guide to Further Research"
           ];
           const superscriptPattern = /^\d+[a-zA-Z]*f{1,2}$|^\d+[a-zA-Z]$|^\d+$/;
           const filtered = bookmarks.filter(bm => !removeTitles.includes(bm.title) && !superscriptPattern.test(bm.title.trim()));
