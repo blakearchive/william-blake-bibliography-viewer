@@ -69,13 +69,13 @@ body {
 }
 
 .selectable-text-span::-moz-selection {
-  background: rgba(25, 118, 210, 0.3);
-  color: rgba(0, 0, 0, 0.8);
+  background: rgba(25, 118, 210, 0.55) !important;
+  color: #061223 !important;
 }
 
 .selectable-text-span::selection {
-  background: rgba(25, 118, 210, 0.3);
-  color: rgba(0, 0, 0, 0.8);
+  background: rgba(25, 118, 210, 0.55) !important;
+  color: #061223 !important;
 }
 
 /* Page container for text selection */
@@ -289,4 +289,18 @@ body {
 }
 .nav-buttons button:hover {
   background: #1565c0;
+}
+
+/* visible bounding when debug mode enabled */
+.selectable-text-span.debug-outline {
+  outline: 1px dashed rgba(255, 87, 34, 0.9);
+}
+
+/* temporary highlight applied by JS when user selects text */
+.selectable-temp-highlight {
+  position: absolute;
+  background: rgba(255, 235, 59, 0.9);
+  pointer-events: none;
+  z-index: 25;
+  border-radius: 2px;
 }

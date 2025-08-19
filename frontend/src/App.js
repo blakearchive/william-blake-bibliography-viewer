@@ -68,9 +68,18 @@ function PrefatoryMaterialTree({ onJump }) {
 // Restore BookmarkTree component
 // Helper to clean unwanted trailing number/letter patterns (e.g., 32F, 35FF, 39f, 12a, 123)
 function cleanBookmarkTitle(title) {
-  // Only remove trailing page codes (e.g., '39F', '35FF', '12a') at the end of the title, not numbers in parentheses or text
-  // Examples: 'IV. Biographies39F (Including ...' => 'IV. Biographies (Including ...'
-  return title.replace(/(\d+[a-zA-Z]{0,2})$/, '').replace(/\s{2,}/g, ' ').trim();
+  // Normalize whitespace and remove trailing page codes; handle non-breaking spaces and Unicode combining marks
+  if (!title) return '';
+  let t = title.replace(/\u00A0/g, ' '); // NBSP -> space
+  // Remove trailing page-like codes (e.g., '39F', '35FF', '12a')
+  t = t.replace(/(\d+[a-zA-Z]{0,2})$/, '').replace(/\s{2,}/g, ' ').trim();
+  // Unicode normalize and strip diacritics
+  try {
+    t = t.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  } catch (e) {
+    // ignore if normalize not supported
+  }
+  return t;
 }
 
 // Normalize titles for robust comparison: lowercase, normalize apostrophes, remove punctuation, collapse whitespace
@@ -89,21 +98,23 @@ function BookmarkTree({ bookmarks, onJump }) {
   return (
     <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
       {bookmarks.map((bm, idx) => (
-        <li key={idx}>
+        <li key={idx} style={{ marginBottom: 6, marginTop: idx === 0 ? 0 : 8 }}>
           {bm.children && bm.children.length > 0 ? (
             <CollapsibleSection
               title={cleanBookmarkTitle(bm.title)}
               defaultOpen={false}
               onTitleClick={bm.page ? () => onJump(bm.page) : undefined}
             >
-              {/* Robust filtering: remove children whose raw title equals parent raw title, or whose normalized cleaned title equals parent's normalized cleaned title */}
+              {/* Robust filtering: remove children whose cleaned/normalized title equals parent cleaned/normalized title */}
               {(() => {
                 const parentRaw = (bm.title || '').trim();
-                const parentNorm = normalizeTitle(cleanBookmarkTitle(parentRaw));
+                const parentClean = cleanBookmarkTitle(parentRaw);
+                const parentNorm = normalizeTitle(parentClean);
                 const childrenFiltered = bm.children.filter(c => {
                   const childRaw = (c.title || '').trim();
-                  const childNorm = normalizeTitle(cleanBookmarkTitle(childRaw));
-                  if (childRaw === parentRaw) return false; // exact raw match
+                  const childClean = cleanBookmarkTitle(childRaw);
+                  const childNorm = normalizeTitle(childClean);
+                  if (childClean === parentClean) return false; // cleaned exact match
                   if (childNorm === parentNorm) return false; // normalized match
                   return true;
                 });
@@ -287,7 +298,7 @@ function App() {
 
   // Internal document links: add offset
   const handleInternalLink = (page) => {
-    const correctedPage = page + 3;
+    const correctedPage = page + 2; // adjusted offset: previously +3, changed to +2 to correct off-by-one
     window.open(`?page=${correctedPage}`, '_blank');
   };
 
@@ -352,66 +363,141 @@ function App() {
         >
           Return to Title Page/Home
         </button>
-        <PrefatoryMaterialTree onJump={handleJump} />
         {(() => {
           const removeTitles = [
-            "Contents0F",
-            "Citations, Annotations, and Links 19",
-            "User Note",
-            "Abbreviations",
-            "William Blake’s Works",
-            "Secondary Texts and Notes",
-            "Acknowledgments",
-            "Preface",
-            "Introduction",
-            "Citations, Annotations, and Links",
-            "A Note on Specialized Terms for Researchers New to William Blake",
-            "Different Blake Journals",
-            "Document Bookmarks",
-            // Remove this parent entry to eliminate the duplicate child
-            "A Selected Annotated Bibliography of William Blake and His Circle: A Guide to Further Research"
-          ];
-          const superscriptPattern = /^\d+[a-zA-Z]*f{1,2}$|^\d+[a-zA-Z]$|^\d+$/;
-          const filtered = bookmarks.filter(bm => !removeTitles.includes(bm.title) && !superscriptPattern.test(bm.title.trim()));
-          return filtered.map((bm, idx, arr) => {
-            // Insert a blank line between Appendix B and Appendix C
-            if (
-              cleanBookmarkTitle(bm.title).toLowerCase().startsWith('appendix c') &&
-              idx > 0 && cleanBookmarkTitle(arr[idx - 1].title).toLowerCase().startsWith('appendix b')
-            ) {
-              return [
-                <div key={bm.title + '-spacer'} style={{ height: 16 }} />,
-                <CollapsibleSection
-                  key={bm.title}
-                  title={cleanBookmarkTitle(bm.title)}
-                  defaultOpen={false}
-                  onTitleClick={bm.page ? () => handleJump(bm.page) : undefined}
-                >
-                  {bm.children && bm.children.length > 0 ? (
-                    <BookmarkTree bookmarks={bm.children} onJump={handleJump} />
-                  ) : (
-                    <span className="bookmark-title anchor-link" onClick={() => handleJump(bm.page)}>{cleanBookmarkTitle(bm.title)}</span>
-                  )}
-                </CollapsibleSection>
-              ];
-            }
-            return (
-              <CollapsibleSection
-                key={bm.title}
-                title={cleanBookmarkTitle(bm.title)}
-                defaultOpen={false}
-                onTitleClick={bm.page ? () => handleJump(bm.page) : undefined}
-              >
-                {bm.children && bm.children.length > 0 ? (
-                  <BookmarkTree bookmarks={bm.children} onJump={handleJump} />
-                ) : (
-                  <span className="bookmark-title anchor-link" onClick={() => handleJump(bm.page)}>{cleanBookmarkTitle(bm.title)}</span>
-                )}
-              </CollapsibleSection>
-            );
-          });
-        })()}
-      </aside>
+             "Contents0F",
+             "Citations, Annotations, and Links 19",
+             "User Note",
+             "Abbreviations",
+             "William Blake’s Works",
+             "Secondary Texts and Notes",
+             "Acknowledgments",
+             "Preface",
+             "Introduction",
+             "Citations, Annotations, and Links",
+             "A Note on Specialized Terms for Researchers New to William Blake",
+             "Different Blake Journals",
+             "Document Bookmarks",
+             "A Selected Annotated Bibliography of William Blake and His Circle: A Guide to Further Research"
+           ];
+           const superscriptPattern = /^\d+[a-zA-Z]*f{1,2}$|^\d+[a-zA-Z]$|^\d+$/;
+           // First filter out explicit removeTitles and superscript-like titles
+           const preFiltered = bookmarks.filter(bm => !removeTitles.includes(bm.title) && !superscriptPattern.test((bm.title || '').trim()));
+           // Recursive check: return true if any descendant (at any depth) normalizes to the parent norm
+           function descendantHasSameNorm(children, parentNorm) {
+             if (!children || children.length === 0) return false;
+             for (const c of children) {
+               const childNorm = normalizeTitle(cleanBookmarkTitle(c.title || ''));
+               if (childNorm === parentNorm) return true;
+               if (c.children && c.children.length > 0) {
+                 if (descendantHasSameNorm(c.children, parentNorm)) return true;
+               }
+             }
+             return false;
+           }
+           // Then remove any top-level parent that contains a descendant with the same normalized/cleaned title
+           const filtered = preFiltered.filter(bm => {
+             if (!bm.children || bm.children.length === 0) return true;
+             const parentNorm = normalizeTitle(cleanBookmarkTitle(bm.title || ''));
+             // if any descendant normalizes to same as parent, drop the parent to avoid duplicate menus
+             if (descendantHasSameNorm(bm.children, parentNorm)) return false;
+             return true;
+           });
+
+           // Deduplicate top-level entries by normalized title.
+           // If two top-level entries normalize to the same title, prefer the one that has children.
+           const seen = new Map(); // norm -> index in deduped
+           const deduped = [];
+           filtered.forEach(bm => {
+             const norm = normalizeTitle(cleanBookmarkTitle(bm.title || ''));
+             const hasChildren = bm.children && bm.children.length > 0;
+             if (!seen.has(norm)) {
+               seen.set(norm, deduped.length);
+               deduped.push(bm);
+             } else {
+               const idx = seen.get(norm);
+               const existing = deduped[idx];
+               const existingHasChildren = existing.children && existing.children.length > 0;
+               // prefer the one with children
+               if (!existingHasChildren && hasChildren) {
+                 deduped[idx] = bm;
+               }
+               // otherwise keep existing
+             }
+           });
+
+           const finalList = deduped;
+           // find Table of Contents item (normalized) and remove it from finalList so we can render it above PrefatoryMaterialTree
+           const tocNorm = 'table of contents';
+           let tocItem = null;
+           const remaining = [];
+           for (const bm of finalList) {
+             const norm = normalizeTitle(cleanBookmarkTitle(bm.title || ''));
+             if (!tocItem && norm === tocNorm) {
+               tocItem = bm;
+             } else {
+               remaining.push(bm);
+             }
+           }
+
+           // Build rendered elements: Table of Contents (if present), PrefatoryMaterialTree, then remaining bookmarks
+           const rendered = [];
+           if (tocItem) {
+             rendered.push(
+               <CollapsibleSection
+                 key={tocItem.title + '-toc'}
+                 title={cleanBookmarkTitle(tocItem.title)}
+                 defaultOpen={false}
+                 onTitleClick={tocItem.page ? () => handleJump(tocItem.page) : undefined}
+               >
+                 {tocItem.children && tocItem.children.length > 0 ? (
+                   <BookmarkTree bookmarks={tocItem.children} onJump={handleJump} />
+                 ) : null}
+               </CollapsibleSection>
+             );
+           }
+
+           // Prefatory material always next
+           rendered.push(<PrefatoryMaterialTree key="prefatory" onJump={handleJump} />);
+
+           // Then render the rest
+           return rendered.concat(remaining.map((bm, idx, arr) => {
+             // Insert a blank line between Appendix B and Appendix C
+             if (
+               cleanBookmarkTitle(bm.title).toLowerCase().startsWith('appendix c') &&
+               idx > 0 && cleanBookmarkTitle(arr[idx - 1].title).toLowerCase().startsWith('appendix b')
+             ) {
+               return [
+                 <div key={bm.title + '-spacer'} style={{ height: 16 }} />,
+                 // Always render a CollapsibleSection so the arrow appears; include children only if present
+                 <CollapsibleSection
+                   key={bm.title}
+                   title={cleanBookmarkTitle(bm.title)}
+                   defaultOpen={false}
+                   onTitleClick={bm.page ? () => handleJump(bm.page) : undefined}
+                 >
+                   {bm.children && bm.children.length > 0 ? (
+                     <BookmarkTree bookmarks={bm.children} onJump={handleJump} />
+                   ) : null}
+                 </CollapsibleSection>
+               ];
+             }
+             // Always render a CollapsibleSection so the arrow appears; include children only if present
+             return (
+               <CollapsibleSection
+                 key={bm.title}
+                 title={cleanBookmarkTitle(bm.title)}
+                 defaultOpen={false}
+                 onTitleClick={bm.page ? () => handleJump(bm.page) : undefined}
+               >
+                 {bm.children && bm.children.length > 0 ? (
+                   <BookmarkTree bookmarks={bm.children} onJump={handleJump} />
+                 ) : null}
+               </CollapsibleSection>
+             );
+           }));
+         })()}
+       </aside>
       <main className="viewer">
         {/* ...existing header, search bar, and viewer code... */}
         <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -528,7 +614,7 @@ function App() {
                               }}
                               onNavigate={target => {
                                 if (typeof target === 'number') {
-                                  window.open(`?page=${target}`, '_blank');
+                                  handleInternalLink(target);
                                 }
                               }}
                             />

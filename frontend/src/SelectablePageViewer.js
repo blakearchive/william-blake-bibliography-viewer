@@ -19,6 +19,8 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const containerRef = useRef(null);
   const imageRef = useRef(null);
+  const [selectionRect, setSelectionRect] = useState(null);
+  const tempHighlightRef = useRef(null);
 
   useEffect(() => {
     const fetchTextData = async () => {
@@ -42,12 +44,79 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
 
   const handleImageLoad = () => {
     if (imageRef.current) {
-      setImageSize({
-        width: imageRef.current.offsetWidth,
-        height: imageRef.current.offsetHeight
-      });
+      // Use getBoundingClientRect to get the actual displayed width and height
+      const rect = imageRef.current.getBoundingClientRect();
+      let displayedWidth = Math.round(rect.width);
+      // Use the actual rendered height from the rect to avoid forcing a computed height that can clip
+      let displayedHeight = Math.round(rect.height);
+
+      // Fallback: if the rect measured 0 (can happen when opened in a new tab or during layout quirks),
+      // use the image's natural dimensions so we don't set an erroneously small min-height.
+      const natW = imageRef.current.naturalWidth || 0;
+      const natH = imageRef.current.naturalHeight || 0;
+      if ((!displayedWidth || !displayedHeight) && natW && natH) {
+        displayedWidth = natW;
+        displayedHeight = natH;
+      }
+
+      setImageSize({ width: displayedWidth, height: displayedHeight });
+      // Ensure container tall enough to show the image (prevents collapse/clipping on initial load/new tabs)
+      if (containerRef.current) {
+        containerRef.current.style.minHeight = `${displayedHeight}px`;
+        // Lock the container width to the measured/displayed width so the layout doesn't collapse before the image finishes rendering
+        // This is important for the 'open in new tab' case where parent widths can be temporarily zero.
+        containerRef.current.style.width = `${displayedWidth}px`;
+      }
+      // Debug log to help diagnose mis-sized pages
+      // eslint-disable-next-line no-console
+      console.log(`Image loaded page ${pageNum} displayed:${displayedWidth}x${displayedHeight}`);
     }
   };
+
+  // Retry loading via XHR if the <img> fails to load (useful if object URL becomes invalid)
+  const handleImageError = async () => {
+    console.warn(`Image failed to load for page ${pageNum}, attempting XHR retry`);
+    try {
+      const res = await axios.get(`/api/page/${pageNum}`, { responseType: 'blob', timeout: 10000 });
+      const newUrl = URL.createObjectURL(res.data);
+      if (imageRef.current) {
+        imageRef.current.src = newUrl;
+        // small delay to allow load event
+        setTimeout(handleImageLoad, 100);
+      }
+    } catch (err) {
+      console.error(`Retry failed for page ${pageNum}:`, err);
+    }
+  };
+
+  // Recompute image size on window resize to keep overlays aligned when layout changes
+  useEffect(() => {
+    const onResize = () => {
+      if (imageRef.current) {
+        const rect = imageRef.current.getBoundingClientRect();
+        let displayedWidth = Math.round(rect.width);
+        let displayedHeight = Math.round(rect.height);
+
+        // Fallback to natural size if browser reports 0 during a transient layout state
+        const natW = imageRef.current.naturalWidth || 0;
+        const natH = imageRef.current.naturalHeight || 0;
+        if ((!displayedWidth || !displayedHeight) && natW && natH) {
+          displayedWidth = natW;
+          displayedHeight = natH;
+        }
+
+        setImageSize({ width: displayedWidth, height: displayedHeight });
+        if (containerRef.current) {
+          // update minHeight to avoid collapse
+          containerRef.current.style.minHeight = `${displayedHeight}px`;
+          // keep the container width in sync with the image to avoid transient clipping
+          containerRef.current.style.width = `${displayedWidth}px`;
+        }
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const calculateScaleFactor = () => {
     if (!textBlocks || !imageSize.width || !imageSize.height) return { scaleX: 1, scaleY: 1 };
@@ -62,26 +131,40 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
     const { scaleX, scaleY } = calculateScaleFactor();
     const [x0, y0, x1, y1] = span.bbox;
     
+    const leftPx = Math.round(x0 * scaleX);
+    const topPx = Math.round(y0 * scaleY);
+    const widthPx = Math.max(Math.round((x1 - x0) * scaleX), 1);
+    const heightPx = Math.max(Math.round((y1 - y0) * scaleY), 1);
+
+    // Skip spans that fall completely outside the measured image bounds (prevents overflow/clipping issues)
+    if (imageSize.width && imageSize.height) {
+      if (leftPx > imageSize.width || topPx > imageSize.height) return null;
+      if (leftPx + widthPx < 0 || topPx + heightPx < 0) return null;
+    }
+
     const style = {
       position: 'absolute',
-      left: `${x0 * scaleX}px`,
-      top: `${y0 * scaleY}px`,
-      width: `${(x1 - x0) * scaleX}px`,
-      height: `${(y1 - y0) * scaleY}px`,
-      fontSize: `${Math.max(span.size * scaleY, 8)}px`, // Minimum font size
-      fontFamily: span.font,
-      fontWeight: span.flags & 16 ? 'bold' : 'normal', // Bold flag
-      fontStyle: span.flags & 2 ? 'italic' : 'normal', // Italic flag
-      color: 'rgba(0, 0, 0, 0.01)', // Nearly transparent but selectable
+      left: `${leftPx}px`,
+      top: `${topPx}px`,
+      width: `${widthPx}px`,
+      height: `${heightPx}px`,
+      fontSize: `${Math.max(Math.round(span.size * scaleY), 8)}px`,
+      fontFamily: span.font || 'serif',
+      fontWeight: span.flags & 16 ? 'bold' : 'normal',
+      fontStyle: span.flags & 2 ? 'italic' : 'normal',
+      color: 'transparent',
+      WebkitTextFillColor: 'transparent',
       cursor: 'text',
       userSelect: 'text',
-      pointerEvents: 'all',
-      zIndex: 10,
-      lineHeight: `${(y1 - y0) * scaleY}px`,
-      overflow: 'visible',
+      WebkitUserSelect: 'text',
+      MozUserSelect: 'text',
+      pointerEvents: 'auto',
+      zIndex: 20,
+      lineHeight: `${heightPx}px`,
+      overflow: 'hidden',
       whiteSpace: 'pre',
-      display: 'flex',
-      alignItems: 'center',
+      display: 'inline-block',
+      verticalAlign: 'top',
       backgroundColor: 'transparent'
     };
 
@@ -95,6 +178,57 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
         {span.text}
       </div>
     );
+  };
+
+  // Clear selection helpers
+  const clearSelectionOverlay = () => {
+    setSelectionRect(null);
+  };
+
+  // Monitor selection inside the selectable overlay and show a temporary highlight rect + copy button
+  useEffect(() => {
+    const onMouseUp = (e) => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed) {
+        clearSelectionOverlay();
+        return;
+      }
+      // Only consider selections that are inside our containerRef
+      const range = sel.getRangeAt(0);
+      const common = range.commonAncestorContainer;
+      if (!containerRef.current || !containerRef.current.contains(common)) {
+        // selection outside container
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      const containerRect = containerRef.current.getBoundingClientRect();
+      // compute position relative to container
+      const left = rect.left - containerRect.left;
+      const top = rect.top - containerRect.top;
+      setSelectionRect({ left, top, width: rect.width, height: rect.height, text: sel.toString() });
+    };
+    const onKeyUp = (e) => {
+      if (e.key === 'Escape') clearSelectionOverlay();
+    };
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
+  const copySelectionToClipboard = async () => {
+    if (!selectionRect || !selectionRect.text) return;
+    try {
+      await navigator.clipboard.writeText(selectionRect.text);
+      // small visual feedback
+      const prev = selectionRect;
+      setSelectionRect({ ...prev, copied: true });
+      setTimeout(() => clearSelectionOverlay(), 1200);
+    } catch (err) {
+      console.error('Copy failed', err);
+    }
   };
 
   return (
@@ -113,6 +247,7 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
         src={imageUrl} 
         alt={`Page ${pageNum}`}
         onLoad={handleImageLoad}
+        onError={handleImageError}
         style={{ 
           display: 'block',
           maxWidth: '100%',
@@ -142,15 +277,19 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
             position: 'absolute', 
             top: 0, 
             left: 0, 
-            width: '100%', 
-            height: '100%',
-            pointerEvents: 'none'
+            width: `${imageSize.width}px`, 
+            height: `${imageSize.height}px`,
+            pointerEvents: 'auto', // allow selection and click-through for child spans
+            userSelect: 'text',
+            WebkitUserSelect: 'text',
+            zIndex: 15,
+            overflow: 'hidden' // clip spans that mistakenly extend beyond image bounds
           }}
         >
           {textBlocks.blocks.map((block, blockIndex) => 
             block.lines.map((line, lineIndex) =>
               line.spans.map((span, spanIndex) =>
-                span.text.trim() && renderTextSpan(span, blockIndex, lineIndex, spanIndex)
+                span.text && span.text.trim() && renderTextSpan(span, blockIndex, lineIndex, spanIndex)
               )
             )
           )}
@@ -195,6 +334,39 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
         >
           📝 Text Ready
         </div>
+      )}
+
+      {/* Temporary selection highlight and copy button */}
+      {selectionRect && (
+        <>
+          <div
+            className="selectable-temp-highlight"
+            style={{
+              left: `${selectionRect.left}px`,
+              top: `${selectionRect.top}px`,
+              width: `${selectionRect.width}px`,
+              height: `${selectionRect.height}px`
+            }}
+          />
+          <button
+            onClick={copySelectionToClipboard}
+            style={{
+              position: 'absolute',
+              left: `${Math.min(selectionRect.left + selectionRect.width + 8, (imageSize.width || 800) - 90)}px`,
+              top: `${Math.max(selectionRect.top, 8)}px`,
+              zIndex: 30,
+              padding: '6px 8px',
+              borderRadius: 6,
+              border: 'none',
+              background: selectionRect.copied ? '#4caf50' : '#1976d2',
+              color: '#fff',
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+            }}
+          >
+            {selectionRect.copied ? 'Copied' : 'Copy'}
+          </button>
+        </>
       )}
     </div>
   );
