@@ -54,19 +54,139 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
       // use the image's natural dimensions so we don't set an erroneously small min-height.
       const natW = imageRef.current.naturalWidth || 0;
       const natH = imageRef.current.naturalHeight || 0;
-      if ((!displayedWidth || !displayedHeight) && natW && natH) {
-        displayedWidth = natW;
-        displayedHeight = natH;
+
+      // If bounding rect is tiny or zero, compute a reasonable displayedWidth based on parent/viewport
+      const parent = containerRef.current && containerRef.current.parentElement;
+      const parentAvailable = parent ? Math.round(parent.getBoundingClientRect().width) : window.innerWidth;
+      if ((!displayedWidth || !displayedHeight) || displayedWidth < 100) {
+        // Prefer parentAvailable but cap at natural width and the viewer's maxWidth (900px)
+        const cap = Math.min(natW || 1224, 900, parentAvailable || window.innerWidth);
+        displayedWidth = cap || displayedWidth || natW || 800;
+        if (natW && natH) {
+          displayedHeight = Math.round((displayedWidth / natW) * natH);
+        } else if (!displayedHeight) {
+          displayedHeight = Math.round(displayedWidth * 1.3); // fallback aspect
+        }
+      }
+
+      // Defensive: make sure container won't clip via CSS overflow/height settings
+      if (containerRef.current) {
+        containerRef.current.style.overflow = 'visible';
+        containerRef.current.style.height = 'auto';
       }
 
       setImageSize({ width: displayedWidth, height: displayedHeight });
       // Ensure container tall enough to show the image (prevents collapse/clipping on initial load/new tabs)
       if (containerRef.current) {
         containerRef.current.style.minHeight = `${displayedHeight}px`;
-        // Lock the container width to the measured/displayed width so the layout doesn't collapse before the image finishes rendering
-        // This is important for the 'open in new tab' case where parent widths can be temporarily zero.
-        containerRef.current.style.width = `${displayedWidth}px`;
+        // additionally set an explicit height briefly to avoid clipping from ancestor styles
+        containerRef.current.style.height = `${displayedHeight}px`;
+        const container = containerRef.current;
+        try {
+          // Only set a temporary minWidth if the container appears collapsed; don't force width permanently
+          if (container.clientWidth === 0) {
+            const tempMin = `${Math.min(displayedWidth, window.innerWidth)}px`;
+            container.style.minWidth = tempMin;
+            setTimeout(() => {
+              try { if (container) container.style.minWidth = ''; } catch (e) { /* ignore */ }
+            }, 400);
+          }
+          // clear the temporary explicit height after 1 second so normal responsive layout resumes
+          setTimeout(() => {
+            try { if (container) container.style.height = ''; } catch (e) { /* ignore */ }
+          }, 1000);
+        } catch (e) {
+          console.warn('Could not apply temporary width/height fix for image container', e);
+        }
       }
+
+      // Ensure the image itself isn't visually obscured by overlays during layout races
+      try {
+        if (imageRef.current) {
+          imageRef.current.style.position = imageRef.current.style.position || 'relative';
+          imageRef.current.style.zIndex = imageRef.current.style.zIndex || '5';
+          imageRef.current.style.maxHeight = 'none';
+        }
+        // clear temporary zIndex after a short delay to restore normal stacking
+        setTimeout(() => {
+          try { if (imageRef.current) imageRef.current.style.zIndex = ''; } catch (e) {}
+        }, 1000);
+      } catch (e) {
+        // ignore
+      }
+
+      // Re-measure after paint to catch layout races (some browsers report correct natural sizes only after paint)
+      // If the re-measured rect is much smaller than expected, fall back to natural-scaled dimensions.
+      window.requestAnimationFrame(() => {
+        try {
+          if (!imageRef.current) return;
+          const rect2 = imageRef.current.getBoundingClientRect();
+          const measuredW = Math.round(rect2.width);
+          const measuredH = Math.round(rect2.height);
+          // If measurement still looks wrong (very small or tiny fraction of expected), recalc
+          if (measuredH > 0 && measuredW > 0) {
+            // If measurements differ significantly (e.g., measuredH < 60% of our computed), prefer natural-scaled
+            if (measuredH < Math.max(100, Math.round((natH || 1584) * 0.6))) {
+              // compute natural-scaled dims to parentAvailable or cap
+              const capW = Math.min(natW || 1224, 900, parentAvailable || window.innerWidth);
+              const newW = capW;
+              const newH = natW && natH ? Math.round((newW / natW) * natH) : Math.round(newW * 1.3);
+              setImageSize({ width: newW, height: newH });
+              if (containerRef.current) containerRef.current.style.minHeight = `${newH}px`;
+              // small reflow to let layout settle
+              setTimeout(() => {
+                try {
+                  if (containerRef.current) containerRef.current.style.minWidth = '';
+                } catch (e) {}
+              }, 300);
+            } else {
+              // Use measured values (most likely correct)
+              setImageSize({ width: measuredW, height: measuredH });
+              if (containerRef.current) containerRef.current.style.minHeight = `${measuredH}px`;
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+      });
+
+      // Stabilize: re-measure multiple times to catch late layout changes (helps vertical clipping)
+      const stabilizeDisplay = (initialW, initialH) => {
+        const attempts = [80, 240, 600];
+        attempts.forEach((delay) => {
+          setTimeout(() => {
+            try {
+              if (!imageRef.current) return;
+              const r = imageRef.current.getBoundingClientRect();
+              const w = Math.round(r.width);
+              const h = Math.round(r.height);
+              if (w > 50 && h > initialH * 0.5) {
+                // if measured is reasonable, adopt it
+                setImageSize({ width: w, height: h });
+                if (containerRef.current) containerRef.current.style.minHeight = `${h}px`;
+              } else if (h > 50 && initialH < h) {
+                // measured larger than initial estimate, adopt larger
+                setImageSize({ width: w || initialW, height: h });
+                if (containerRef.current) containerRef.current.style.minHeight = `${h}px`;
+              } else {
+                // if still small, expand to natural-scaled cap
+                const natW2 = imageRef.current.naturalWidth || 0;
+                const natH2 = imageRef.current.naturalHeight || 0;
+                const capW2 = Math.min(natW2 || 1224, 900, (containerRef.current && containerRef.current.parentElement) ? Math.round(containerRef.current.parentElement.getBoundingClientRect().width) : window.innerWidth);
+                if (natW2 && natH2) {
+                  const newH2 = Math.round((capW2 / natW2) * natH2);
+                  setImageSize({ width: capW2, height: newH2 });
+                  if (containerRef.current) containerRef.current.style.minHeight = `${newH2}px`;
+                }
+              }
+            } catch (e) {
+              // ignore
+            }
+          }, delay);
+        });
+      };
+      try { stabilizeDisplay(displayedWidth, displayedHeight); } catch (e) {}
+
       // Debug log to help diagnose mis-sized pages
       // eslint-disable-next-line no-console
       console.log(`Image loaded page ${pageNum} displayed:${displayedWidth}x${displayedHeight}`);
@@ -250,7 +370,8 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
         onError={handleImageError}
         style={{ 
           display: 'block',
-          maxWidth: '100%',
+          maxWidth: '900px',
+          width: '100%',
           height: 'auto',
           userSelect: 'none' // Prevent image selection
         }}

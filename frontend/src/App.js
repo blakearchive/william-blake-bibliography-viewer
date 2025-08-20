@@ -95,9 +95,19 @@ function normalizeTitle(title) {
 
 function BookmarkTree({ bookmarks, onJump }) {
   if (!bookmarks || bookmarks.length === 0) return null;
+
+  // Remove entries that, after cleaning, have an empty title (these render as blank headers).
+  // This prevents long sequences of empty headers (e.g., under Exhibition and Sale Catalogues).
+  const visibleBookmarks = bookmarks.filter(bm => {
+    const cleaned = cleanBookmarkTitle(bm.title || '');
+    return cleaned && cleaned.trim() !== '';
+  });
+
+  if (visibleBookmarks.length === 0) return null;
+
   return (
     <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-      {bookmarks.map((bm, idx) => (
+      {visibleBookmarks.map((bm, idx) => (
         <li key={idx} style={{ marginBottom: 6, marginTop: idx === 0 ? 0 : 8 }}>
           {bm.children && bm.children.length > 0 ? (
             <CollapsibleSection
