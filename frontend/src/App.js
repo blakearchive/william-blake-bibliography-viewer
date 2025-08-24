@@ -143,6 +143,7 @@ function BookmarkTree({ bookmarks, onJump }) {
 import axios from 'axios';
 import './blakeArchiveStyle.css';
 import SelectablePageViewer from './SelectablePageViewer';
+import VirtualizedPageList from './VirtualizedPageList';
 
 // Custom sidebar for Prefatory Material
 // PrefatorySidebar removed as per user request
@@ -629,48 +630,20 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <div className="continuous-pages" style={{ maxHeight: '80vh', overflowY: 'auto', border: '1px solid #e0e0e0', borderRadius: 8, padding: 16 }}>
+                <div style={{ maxHeight: '80vh', overflowY: 'auto' }}>
                   {allPages.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
                       Click "Continuous Scroll" to load all pages
                     </div>
                   ) : (
-                    <>
-                      {allPages.map((page) => (
-                        <div key={page.pageNum} id={`page-${page.pageNum}`} style={{ marginBottom: 20 }}>
-                          <div style={{ fontSize: '1.2em', fontWeight: 600, color: '#1976d2', marginBottom: 8 }}>
-                            Page {page.pageNum}
-                          </div>
-                          {page.imageUrl ? (
-                            <SelectablePageViewer 
-                              pageNum={page.pageNum}
-                              imageUrl={page.imageUrl}
-                              style={{ 
-                                maxWidth: '900px', 
-                                width: '100%', 
-                                boxShadow: '0 4px 24px #e0e0e0', 
-                                border: '2px solid #1976d2', 
-                                background: '#fff' 
-                              }}
-                              onNavigate={target => {
-                                if (typeof target === 'number') {
-                                  handleInternalLink(target);
-                                }
-                              }}
-                            />
-                          ) : (
-                            <div style={{ color: 'red', padding: 12, backgroundColor: '#fff2f2', borderRadius: 8 }}>
-                              {page.error || `Loading page ${page.pageNum}...`}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      {loading && (
-                        <div style={{ textAlign: 'center', padding: 20, color: '#666' }}>
-                          Loading more pages...
-                        </div>
-                      )}
-                    </>
+                    <VirtualizedPageList
+                      pages={allPages}
+                      width={960}
+                      containerHeight={Math.min(window.innerHeight * 0.8, 1000)}
+                      onNavigate={(target) => {
+                        if (typeof target === 'number') handleInternalLink(target);
+                      }}
+                    />
                   )}
                 </div>
               )}

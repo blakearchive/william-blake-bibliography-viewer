@@ -19,6 +19,8 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const containerRef = useRef(null);
   const imageRef = useRef(null);
+  const imageFetchControllerRef = useRef(null);
+  const createdLocalObjectUrlRef = useRef(null);
   const [selectionRect, setSelectionRect] = useState(null);
   const tempHighlightRef = useRef(null);
 
@@ -48,6 +50,25 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
       try { controller.abort(); } catch (e) {}
     };
   }, [pageNum]);
+
+  // Cleanup for image fetches and any locally-created object URLs
+  useEffect(() => {
+    return () => {
+      // abort any in-progress image retry fetch
+      try {
+        if (imageFetchControllerRef.current) imageFetchControllerRef.current.abort();
+      } catch (e) {}
+      // if we created a local object URL during a retry, revoke it
+      try {
+        if (createdLocalObjectUrlRef.current) {
+          URL.revokeObjectURL(createdLocalObjectUrlRef.current);
+          createdLocalObjectUrlRef.current = null;
+        }
+      } catch (e) {}
+      // clear image src to avoid continuing browser fetch
+      try { if (imageRef.current) imageRef.current.src = ''; } catch (e) {}
+    };
+  }, []);
 
   const handleImageLoad = async () => {
     if (imageRef.current) {
@@ -206,16 +227,36 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
   // Retry loading via XHR if the <img> fails to load (useful if object URL becomes invalid)
   const handleImageError = async () => {
     console.warn(`Image failed to load for page ${pageNum}, attempting XHR retry`);
+    // Abort previous retry if any
+    try { if (imageFetchControllerRef.current) imageFetchControllerRef.current.abort(); } catch (e) {}
+    const controller = new AbortController();
+    imageFetchControllerRef.current = controller;
     try {
-      const res = await axios.get(`/api/page/${pageNum}`, { responseType: 'blob', timeout: 10000 });
+      const res = await axios.get(`/api/page/${pageNum}`, { responseType: 'blob', timeout: 10000, signal: controller.signal });
+      if (controller.signal.aborted) return;
       const newUrl = URL.createObjectURL(res.data);
+      // track locally-created URL so we can revoke it on unmount
+      try {
+        if (createdLocalObjectUrlRef.current) {
+          // revoke previous one
+          URL.revokeObjectURL(createdLocalObjectUrlRef.current);
+        }
+      } catch (e) {}
+      createdLocalObjectUrlRef.current = newUrl;
       if (imageRef.current) {
         imageRef.current.src = newUrl;
         // small delay to allow load event
         setTimeout(handleImageLoad, 100);
       }
     } catch (err) {
+      if (err && err.name === 'CanceledError') {
+        // aborted, nothing to do
+        return;
+      }
       console.error(`Retry failed for page ${pageNum}:`, err);
+    } finally {
+      // clear controller reference
+      try { if (imageFetchControllerRef.current === controller) imageFetchControllerRef.current = null; } catch (e) {}
     }
   };
 
