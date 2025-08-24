@@ -23,16 +23,20 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
   const tempHighlightRef = useRef(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchTextData = async () => {
       if (!pageNum) return;
-      
       console.log(`Fetching text data for page ${pageNum}`);
       setLoading(true);
       try {
-        const response = await axios.get(`/api/page/${pageNum}/text`);
+        const response = await axios.get(`/api/page/${pageNum}/text`, { signal: controller.signal });
         console.log(`Text data loaded for page ${pageNum}:`, response.data);
         setTextBlocks(response.data);
       } catch (error) {
+        if (error && error.name === 'CanceledError') {
+          // request aborted
+          return;
+        }
         console.error(`Error loading text for page ${pageNum}:`, error);
       } finally {
         setLoading(false);
@@ -40,10 +44,16 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
     };
 
     fetchTextData();
+    return () => {
+      try { controller.abort(); } catch (e) {}
+    };
   }, [pageNum]);
 
-  const handleImageLoad = () => {
+  const handleImageLoad = async () => {
     if (imageRef.current) {
+      // prefer decode() so we measure after the browser has decoded the image
+      try { if (imageRef.current.decode) await imageRef.current.decode(); } catch (e) { /* ignore decode errors */ }
+
       // Use getBoundingClientRect to get the actual displayed width and height
       const rect = imageRef.current.getBoundingClientRect();
       let displayedWidth = Math.round(rect.width);

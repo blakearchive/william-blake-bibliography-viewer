@@ -240,18 +240,29 @@ function App() {
     setError('');
     const pages = [];
     const failedPages = [];
-    const fetchPageWithRetry = async (pageNum, retries = 3) => {
+
+    // Abort signal so we can cancel outstanding fetches when user navigates away
+    const controller = new AbortController();
+    // store controller for potential abort from other handlers
+    window.__loadAllPagesController = controller;
+
+    const fetchPageWithRetry = async (pageNum, retries = 2, signal = controller.signal) => {
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
           const response = await axios.get(`/api/page/${pageNum}`, {
             responseType: 'blob',
-            timeout: 10000
+            timeout: 10000,
+            signal
           });
           return {
             pageNum,
             imageUrl: URL.createObjectURL(response.data)
           };
         } catch (error) {
+          if (signal && signal.aborted) {
+            // propagate abort
+            throw new Error('aborted');
+          }
           if (attempt === retries) {
             failedPages.push(pageNum);
             return {
@@ -260,12 +271,14 @@ function App() {
               error: `Failed to load page ${pageNum}`
             };
           }
-          await new Promise(res => setTimeout(res, 1000));
+          // small backoff
+          await new Promise(res => setTimeout(res, 500));
         }
       }
     };
     try {
-      const chunkSize = 50;
+      // reduced chunk size to avoid creating too many concurrent requests
+      const chunkSize = 8;
       const totalChunks = Math.ceil(totalPages / chunkSize);
       for (let chunk = 0; chunk < totalChunks; chunk++) {
         const startPage = chunk * chunkSize + 1;
@@ -275,21 +288,32 @@ function App() {
           chunkPromises.push(fetchPageWithRetry(i));
         }
         try {
+          // run chunk with limited concurrency
           const chunkPages = await Promise.all(chunkPromises);
           pages.push(...chunkPages);
           setAllPages([...pages]);
         } catch (chunkError) {
+          // if aborted, stop early
+          if (chunkError && chunkError.message === 'aborted') break;
           console.error(`Error loading chunk ${chunk + 1}:`, chunkError);
         }
+        // yield to event loop so UI can update
+        await new Promise(res => setTimeout(res, 60));
       }
       if (failedPages.length > 0) {
         setError(`Failed to load ${failedPages.length} page(s). Try refreshing or switching to Single Page mode.`);
       }
     } catch (error) {
-      console.error('Error loading pages:', error);
-      setError('Failed to load pages for continuous view');
+      if (error && error.message === 'aborted') {
+        console.log('loadAllPages aborted');
+      } else {
+        console.error('Error loading pages:', error);
+        setError('Failed to load pages for continuous view');
+      }
     } finally {
       setLoading(false);
+      // clear controller
+      try { delete window.__loadAllPagesController; } catch (e) {}
     }
   };
 
@@ -298,6 +322,12 @@ function App() {
     setViewMode(mode);
     if (mode === 'continuous') {
       loadAllPages();
+    } else {
+      // if switching away from continuous, abort any in-flight continuous loads
+      try {
+        if (window.__loadAllPagesController) window.__loadAllPagesController.abort();
+        delete window.__loadAllPagesController;
+      } catch (e) {}
     }
   };
 
