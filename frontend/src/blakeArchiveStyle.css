@@ -299,23 +299,29 @@ body {
 /* temporary highlight applied by JS when user selects text */
 .selectable-temp-highlight {
   position: absolute;
-  background: rgba(255, 235, 59, 0.9);
+  /* lighter temporary selection highlight */
+  background: rgba(255, 235, 59, 0.6);
   pointer-events: none;
   z-index: 25;
   border-radius: 2px;
+  transition: background 160ms ease, opacity 160ms ease;
 }
 
 /* Highlight for search matches inside the selectable overlay */
 .selectable-search-highlight {
-  background: rgba(255, 204, 0, 0.9) !important;
-  color: rgba(6,18,35,0.95) !important;
-  -webkit-text-fill-color: rgba(6,18,35,0.95) !important;
-  outline: 1px solid rgba(255, 170, 0, 0.6);
+  /* softer inline highlight for matches */
+  background: rgba(255, 204, 0, 0.55) !important;
+  color: rgba(6,18,35,0.9) !important;
+  -webkit-text-fill-color: rgba(6,18,35,0.9) !important;
+  outline: 1px solid rgba(255, 170, 0, 0.45);
+  transition: background 160ms ease, outline-color 160ms ease;
 }
 
 /* precise rectangular highlight for matched term only */
 .selectable-search-rect {
-  background: rgba(255, 204, 0, 0.85);
+  /* precise rectangular highlight for matched term only (lighter) */
+  background: rgba(255, 204, 0, 0.45);
   border-radius: 2px;
-  box-shadow: 0 0 0 1px rgba(255, 170, 0, 0.35) inset;
+  box-shadow: 0 0 0 1px rgba(255, 170, 0, 0.25) inset;
+  transition: background 160ms ease, box-shadow 160ms ease;
 }
