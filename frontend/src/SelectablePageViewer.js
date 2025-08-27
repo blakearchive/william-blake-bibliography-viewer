@@ -3,7 +3,9 @@ import axios from 'axios';
 import PdfLinkOverlay from './PdfLinkOverlay';
 
 // Accept onNavigate prop for internal PDF navigation
-const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
+const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate, highlightQuery = '' }) => {
+  // highlightQuery: optional search term to visually highlight on load and auto-scroll to
+  // Note: prop destructuring below will accept highlightQuery if provided
   // Handler for internal navigation (page or anchor)
   const handleNavigate = (target) => {
     if (typeof target === 'number') {
@@ -23,6 +25,155 @@ const SelectablePageViewer = ({ pageNum, imageUrl, style, onNavigate }) => {
   const createdLocalObjectUrlRef = useRef(null);
   const [selectionRect, setSelectionRect] = useState(null);
   const tempHighlightRef = useRef(null);
+  const highlightDebounceRef = useRef(null);
+
+  // Highlight and auto-scroll to first match when highlightQuery or textBlocks changes
+  useEffect(() => {
+    // clear any previous highlights
+    const clearHighlights = () => {
+      try {
+        const prev = tempHighlightRef.current || [];
+        prev.forEach(el => {
+          try { if (el && el.parentElement) el.parentElement.removeChild(el); } catch (e) {}
+        });
+      } catch (e) {}
+      tempHighlightRef.current = [];
+    };
+
+    if (!highlightQuery) {
+      clearHighlights();
+      return;
+    }
+
+    // don't attempt to create highlights until we have textBlocks and the image has a measured size
+    if (!textBlocks || !imageSize || !imageSize.width) {
+      // wait for both textBlocks and imageSize to be available
+      return;
+    }
+
+    // Debounced highlight work: wait briefly to avoid thrashing and ensure layout has settled
+    if (highlightDebounceRef.current) {
+      clearTimeout(highlightDebounceRef.current);
+      highlightDebounceRef.current = null;
+    }
+
+    const doHighlight = () => {
+      // build a case-insensitive regex for the query (phrase or terms)
+      const rawQ = highlightQuery.trim();
+      if (!rawQ) { clearHighlights(); return; }
+
+      // If the user wrapped the query in quotes, treat the quoted content as an exact phrase
+      // (this preserves short/stop words inside the phrase). Otherwise, if the query is a
+      // single alphanumeric token we prefer whole-word matching; otherwise use a substring match.
+      let pattern;
+      const quotedMatch = rawQ.match(/^"(.*)"$|^'(.*)'$/);
+      if (quotedMatch) {
+        const phrase = quotedMatch[1] || quotedMatch[2] || '';
+        try { pattern = phrase.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'); } catch (e) { pattern = phrase; }
+      } else {
+        // Escape the raw query for safe regex construction
+        let escaped;
+        try { escaped = rawQ.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'); } catch (e) { escaped = rawQ; }
+        const singleWord = /^[A-Za-z0-9]+$/.test(rawQ);
+        pattern = singleWord ? `\\b${escaped}\\b` : escaped;
+      }
+      const regexGlobal = new RegExp(pattern, 'gi');
+
+      // find matching span elements inside our selectable overlay and create small absolute highlight rects
+      const container = containerRef.current;
+      if (!container) return;
+      const created = [];
+      try {
+        const spans = container.querySelectorAll('.selectable-text-span');
+        spans.forEach(sp => {
+          try {
+            const raw = (sp.getAttribute('data-text') || sp.textContent || '');
+            if (!raw) return;
+            let m;
+            while ((m = regexGlobal.exec(raw)) !== null) {
+              const matchText = m[0];
+              const idx = m.index;
+              // measure span dimensions and compute fractional positions
+              const spanRect = sp.getBoundingClientRect();
+              const containerRect = container.getBoundingClientRect();
+              const relLeft = spanRect.left - containerRect.left;
+              const relTop = spanRect.top - containerRect.top;
+              const spanW = spanRect.width || 1;
+              const spanH = spanRect.height || 16;
+              const fracStart = idx / Math.max(1, raw.length);
+              const fracLen = matchText.length / Math.max(1, raw.length);
+              const leftPx = Math.round(relLeft + spanW * fracStart);
+              const widthPx = Math.max(6, Math.round(spanW * fracLen));
+              const topPx = Math.round(relTop);
+              const heightPx = Math.max(12, Math.round(spanH));
+              // create highlight element
+              const el = document.createElement('div');
+              el.className = 'selectable-search-rect';
+              el.style.position = 'absolute';
+              el.style.left = `${leftPx}px`;
+              el.style.top = `${topPx}px`;
+              el.style.width = `${widthPx}px`;
+              el.style.height = `${heightPx}px`;
+              el.style.pointerEvents = 'none';
+              el.style.zIndex = 24;
+              container.appendChild(el);
+              created.push(el);
+            }
+          } catch (e) {}
+        });
+      } catch (e) {}
+
+      tempHighlightRef.current = created;
+
+      // scroll the nearest scrollable ancestor (or window) so first match is visible
+      if (created.length > 0) {
+        try {
+          const first = created[0];
+
+          function findScrollParent(el) {
+            let p = el.parentElement;
+            while (p) {
+              const style = window.getComputedStyle(p);
+              const overflowY = style.overflowY;
+              if (overflowY === 'auto' || overflowY === 'scroll') return p;
+              // if element scrolls because content is larger
+              if (p.scrollHeight > p.clientHeight) return p;
+              p = p.parentElement;
+            }
+            return null;
+          }
+
+          const scrollParent = findScrollParent(container) || document.scrollingElement || document.documentElement || window;
+          const firstRect = first.getBoundingClientRect();
+
+          if (scrollParent === window || scrollParent === document.scrollingElement || scrollParent === document.documentElement) {
+            // scroll the window so the match is visible with some padding
+            const desiredTop = window.scrollY + firstRect.top - Math.round(window.innerHeight * 0.18);
+            window.scrollTo({ top: Math.max(0, desiredTop), behavior: 'smooth' });
+          } else {
+            const parentRect = scrollParent.getBoundingClientRect();
+            const offsetTop = firstRect.top - parentRect.top + scrollParent.scrollTop - 40; // 40px padding
+            if (typeof scrollParent.scrollTo === 'function') {
+              scrollParent.scrollTo({ top: Math.max(0, offsetTop), behavior: 'smooth' });
+            } else {
+              scrollParent.scrollTop = Math.max(0, offsetTop);
+            }
+          }
+        } catch (e) {
+          // ignore scroll errors
+        }
+      }
+    };
+
+  // Small debounce so we don't thrash layout during continuous updates
+  highlightDebounceRef.current = setTimeout(doHighlight, 180);
+
+    // cleanup function: clear debounce and highlights
+    return () => {
+      try { if (highlightDebounceRef.current) { clearTimeout(highlightDebounceRef.current); highlightDebounceRef.current = null; } } catch (e) {}
+      clearHighlights();
+    };
+  }, [highlightQuery, textBlocks, imageSize && imageSize.width]);
 
   useEffect(() => {
     const controller = new AbortController();

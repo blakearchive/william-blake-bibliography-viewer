@@ -163,7 +163,14 @@ function App() {
     const p = parseInt(params.get('page'), 10);
     return (p && !isNaN(p) && p > 0) ? p : 1;
   }
+  function getInitialHighlight() {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    return q ? q : '';
+  }
   const [pageNum, setPageNum] = useState(getInitialPageNum());
+  const [highlightQuery, setHighlightQuery] = useState(getInitialHighlight());
+  const [showSearchHelp, setShowSearchHelp] = useState(false);
   const [pageImg, setPageImg] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -220,8 +227,9 @@ function App() {
   };
 
   const handleSearch = async () => {
-    await fetchSearchResults(1, searchPageSize);
-    setSearchModalOpen(true);
+  await fetchSearchResults(1, searchPageSize);
+  setHighlightQuery(search || '');
+  setSearchModalOpen(true);
   };
 
   const handleSearchPageChange = (newPage) => {
@@ -333,14 +341,18 @@ function App() {
   };
 
   // Sidebar/bookmark links: go to actual page
-  const handleJump = (page) => {
-    window.open(`?page=${page}`, '_blank');
+  const handleJump = (page, q) => {
+    const url = q ? `?page=${page}&q=${encodeURIComponent(q)}` : `?page=${page}`;
+    window.open(url, '_blank');
   };
 
   // Internal document links: add offset
   const handleInternalLink = (page) => {
     const correctedPage = page + 2; // adjusted offset: previously +3, changed to +2 to correct off-by-one
-    window.open(`?page=${correctedPage}`, '_blank');
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    const url = q ? `?page=${correctedPage}&q=${encodeURIComponent(q)}` : `?page=${correctedPage}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -373,7 +385,7 @@ function App() {
             <div style={{ maxHeight: 400, minWidth: 500, overflowY: 'auto' }}>
               {results.map((r, idx) => (
                 <div key={idx} className="search-result" style={{ marginBottom: 8, padding: 8, backgroundColor: '#fff', borderRadius: 4 }}>
-                  <span className="anchor-link" onClick={() => handleJump(r.page)} style={{ fontWeight: 600, color: '#1976d2', cursor: 'pointer' }}>
+                  <span className="anchor-link" onClick={() => handleJump(r.page, search)} style={{ fontWeight: 600, color: '#1976d2', cursor: 'pointer' }}>
                     Page {r.page}
                   </span>
                   {/* Always show highlighted lines if present, otherwise highlight content */}
@@ -392,6 +404,33 @@ function App() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Search Help Modal */}
+      {showSearchHelp && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 8px 32px #2222', padding: 24, minWidth: 520, maxWidth: '90%', maxHeight: '80vh', overflowY: 'auto', position: 'relative' }}>
+            <button style={{ position: 'absolute', top: 12, right: 12, fontSize: 20, background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setShowSearchHelp(false)}>&times;</button>
+            <h3 style={{ marginTop: 4, color: '#333' }}>How search works</h3>
+            <p style={{ color: '#444', lineHeight: 1.4 }}>
+              You can search the PDF in a few ways:
+            </p>
+            <ul style={{ color: '#444' }}>
+              <li><strong>Quoted phrase</strong>: wrap a phrase in quotes to match it exactly, including short words. Example: <code>"to be or not to be"</code></li>
+              <li><strong>Single word</strong>: enter a single word (e.g. <code>Blake</code>) — the search prefers whole-word matches.</li>
+              <li><strong>Multiple terms</strong>: enter multiple words (without quotes) to match any of them; results show lines containing any matched term.</li>
+            </ul>
+            <div style={{ marginTop: 12, padding: 12, background: '#fffbe6', borderRadius: 6, color: '#333' }}>
+              Example searches:
+              <div style={{ marginTop: 8 }}>
+                  <code>"William Blake"</code> — exact phrase match (will match the phrase including short words)<br/>
+                <code>is</code> — single-word whole-word match (won't match inside other words)
+              </div>
+            </div>
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+              <button onClick={() => setShowSearchHelp(false)} style={{ padding: '8px 12px', borderRadius: 6, background: '#1976d2', color: '#fff', border: 'none' }}>Close</button>
             </div>
           </div>
         </div>
@@ -561,7 +600,16 @@ function App() {
                 onKeyPress={e => e.key === 'Enter' && handleSearch()}
               />
               <button onClick={handleSearch} style={{ padding: '8px 16px' }}>Search</button>
+              <button
+                onClick={() => setShowSearchHelp(true)}
+                title="Search help"
+                aria-label="Search help"
+                style={{ marginLeft: 6, padding: '6px 10px', borderRadius: 6, border: '1px solid #bdbdbd', background: '#e0e0e0', color: '#222', fontWeight: 600, cursor: 'pointer' }}
+              >
+                ?
+              </button>
             </div>
+            {/* help opens when search input is focused */}
             {results.length > 0 && (
               <div style={{ fontSize: '0.9em', color: '#666' }}>
                 {results.length} result{results.length !== 1 ? 's' : ''} found
@@ -582,6 +630,7 @@ function App() {
                   <SelectablePageViewer 
                     pageNum={pageNum}
                     imageUrl={pageImg}
+                    highlightQuery={highlightQuery}
                     style={{ 
                       maxWidth: '900px', 
                       width: '100%', 
@@ -640,6 +689,7 @@ function App() {
                       pages={allPages}
                       width={960}
                       containerHeight={Math.min(window.innerHeight * 0.8, 1000)}
+                      highlightQuery={highlightQuery}
                       onNavigate={(target) => {
                         if (typeof target === 'number') handleInternalLink(target);
                       }}

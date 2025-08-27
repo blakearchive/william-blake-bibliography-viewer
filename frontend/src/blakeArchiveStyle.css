@@ -304,3 +304,18 @@ body {
   z-index: 25;
   border-radius: 2px;
 }
+
+/* Highlight for search matches inside the selectable overlay */
+.selectable-search-highlight {
+  background: rgba(255, 204, 0, 0.9) !important;
+  color: rgba(6,18,35,0.95) !important;
+  -webkit-text-fill-color: rgba(6,18,35,0.95) !important;
+  outline: 1px solid rgba(255, 170, 0, 0.6);
+}
+
+/* precise rectangular highlight for matched term only */
+.selectable-search-rect {
+  background: rgba(255, 204, 0, 0.85);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 170, 0, 0.35) inset;
+}

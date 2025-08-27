@@ -6,7 +6,7 @@ import SelectablePageViewer from './SelectablePageViewer';
 // Assumptions: `pages` is an array of { pageNum, imageUrl, error }
 // We'll estimate item heights by measuring rendered image width -> height using a known aspect ratio.
 
-export default function VirtualizedPageList({ pages, width = 960, onNavigate, containerHeight = 800 }) {
+export default function VirtualizedPageList({ pages, width = 960, onNavigate, containerHeight = 800, highlightQuery = '' }) {
   const listRef = useRef(null);
   const itemHeights = useRef(new Map());
 
@@ -41,6 +41,7 @@ export default function VirtualizedPageList({ pages, width = 960, onNavigate, co
           <MeasuredPageViewer
             pageNum={page.pageNum}
             imageUrl={page.imageUrl}
+            highlightQuery={highlightQuery}
             onHeight={(h) => setItemHeight(page.pageNum, h)}
             onNavigate={onNavigate}
           />
@@ -65,7 +66,7 @@ export default function VirtualizedPageList({ pages, width = 960, onNavigate, co
 }
 
 // MeasuredPageViewer wraps SelectablePageViewer and reports its real height after layout
-function MeasuredPageViewer({ pageNum, imageUrl, onHeight, onNavigate }) {
+function MeasuredPageViewer({ pageNum, imageUrl, onHeight, onNavigate, highlightQuery = '' }) {
   const ref = useRef(null);
   const [measured, setMeasured] = useState(false);
 
@@ -84,9 +85,9 @@ function MeasuredPageViewer({ pageNum, imageUrl, onHeight, onNavigate }) {
     return () => clearTimeout(t);
   }, [imageUrl, onHeight]);
 
-  return (
+    return (
     <div ref={ref} style={{ width: '100%' }}>
-      <SelectablePageViewer pageNum={pageNum} imageUrl={imageUrl} onNavigate={onNavigate} />
+      <SelectablePageViewer pageNum={pageNum} imageUrl={imageUrl} highlightQuery={highlightQuery} onNavigate={onNavigate} />
     </div>
   );
 }
