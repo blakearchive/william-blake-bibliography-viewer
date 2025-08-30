@@ -18,7 +18,7 @@ _first_pages_lock = Lock()
 from io import BytesIO
 from rapidfuzz import fuzz, process
 
-PDF_PATH = os.path.join(os.path.dirname(__file__), "Bibliography.Revised.8.29.25.pdf")
+PDF_PATH = os.path.join(os.path.dirname(__file__), "Bibliography Revised 8.29.25.pdf")
 # Use /tmp for index directory in containerized environments
 INDEX_DIR = os.getenv('SEARCH_INDEX_DIR', '/tmp/indexdir')
 
